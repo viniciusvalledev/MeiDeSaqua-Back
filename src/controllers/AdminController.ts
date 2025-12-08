@@ -850,4 +850,86 @@ export class AdminController {
       return res.status(500).json({ message: "Erro ao excluir a avaliação." });
     }
   }
+  static async exportActiveEstabelecimentos(req: Request, res: Response) {
+    try {
+      const estabelecimentos = await EstabelecimentoService.listarTodos();
+
+      if (!estabelecimentos || estabelecimentos.length === 0) {
+        return res.status(404).json({ message: "Nenhum estabelecimento ativo para exportar." });
+      }
+
+      // Cabeçalhos do CSV
+      const headers = [
+        "ID",
+        "Nome Fantasia",
+        "CNPJ",
+        "Categoria",
+        "Responsável",
+        "CPF Responsável",
+        "Email",
+        "Telefone",
+        "Endereço",
+        "CNAE",
+        "Descrição",
+        "Diferencial",
+        "Tags Invisíveis",
+        "Website",
+        "Instagram",
+        "Venda",
+        "Escala",
+        "Status",
+      ];
+
+      const SEPARATOR = ";";
+
+      // Função auxiliar para escapar campos CSV
+      const escapeCsvField = (field: any) => {
+        if (field === null || field === undefined) return '""';
+        const stringField = String(field);
+        // Trata aspas, vírgulas e quebras de linha
+        if (stringField.includes('"') || stringField.includes(',') || stringField.includes('\n')) {
+          return `"${stringField.replace(/"/g, '""')}"`;
+        }
+        return `"${stringField}"`;
+      };
+
+      // Monta o conteúdo do CSV
+      let csvContent = headers.join(",") + "\n";
+
+      estabelecimentos.forEach((est) => {
+        const row = [
+          est.estabelecimentoId,
+          est.nomeFantasia,
+          est.cnpj,
+          est.categoria,
+          est.nomeResponsavel,
+          est.cpfResponsavel,
+          est.emailEstabelecimento,
+          est.contatoEstabelecimento,
+          est.endereco,
+          est.cnae,
+          est.descricao,
+          est.descricaoDiferencial,
+          est.tagsInvisiveis,
+          est.website,
+          est.instagram,
+          est.venda,
+          est.escala,
+          est.status,
+          ""
+        ];
+
+        csvContent += row.map(escapeCsvField).join(SEPARATOR) + "\n";
+      });
+
+      // Configura os headers da resposta para download
+      res.header("Content-Type", "text/csv; charset=utf-8");
+      res.attachment("estabelecimentos_ativos_meidesaqua.csv");
+      return res.status(200).send(csvContent);
+
+    } catch (error) {
+      console.error("Erro ao exportar estabelecimentos:", error);
+      return res.status(500).json({ message: "Erro ao gerar arquivo de exportação." });
+    }
+  }
 }
