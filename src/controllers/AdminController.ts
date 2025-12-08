@@ -887,14 +887,14 @@ export class AdminController {
         if (field === null || field === undefined) return '""';
         const stringField = String(field);
         // Trata aspas, vírgulas e quebras de linha
-        if (stringField.includes('"') || stringField.includes(',') || stringField.includes('\n')) {
+        if (stringField.includes('"') || stringField.includes(SEPARATOR) || stringField.includes('\n')) {
           return `"${stringField.replace(/"/g, '""')}"`;
         }
         return `"${stringField}"`;
       };
 
       // Monta o conteúdo do CSV
-      let csvContent = headers.join(",") + "\n";
+      let csvContent = headers.join(SEPARATOR) + "\n";
 
       estabelecimentos.forEach((est) => {
         const row = [
