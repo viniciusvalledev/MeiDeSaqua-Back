@@ -21,34 +21,35 @@ router.post(
   AdminController.editAndApproveRequest
 );
 router.post(
-    "/approve/:id", 
-    adminAuthMiddleware, 
-    AdminController.approveRequest
+  "/approve/:id",
+  adminAuthMiddleware,
+  AdminController.approveRequest
 );
-router.post(
-    "/reject/:id", 
-    adminAuthMiddleware, 
-    AdminController.rejectRequest
-);
+router.post("/reject/:id", adminAuthMiddleware, AdminController.rejectRequest);
+
 router.get(
   "/estabelecimentos-ativos",
   adminAuthMiddleware,
   AdminController.getAllActiveEstabelecimentos
 );
+
 router.patch(
   "/estabelecimento/:id",
   adminAuthMiddleware,
   upload.any(),
   AdminController.adminUpdateEstabelecimento
 );
-router.delete("/estabelecimento/:id",
-   adminAuthMiddleware, 
-   AdminController.adminDeleteEstabelecimento
-  );
-  router.get(
-  "/avaliacoes/estabelecimento/:estabelecimentoId", // <--- MUDANÇA AQUI
+
+router.delete(
+  "/estabelecimento/:id",
   adminAuthMiddleware,
-  AdminController.getAvaliacoesByEstabelecimento // <--- MUDANÇA AQUI
+  AdminController.adminDeleteEstabelecimento
+);
+
+router.get(
+  "/avaliacoes/estabelecimento/:estabelecimentoId",
+  adminAuthMiddleware,
+  AdminController.getAvaliacoesByEstabelecimento
 );
 
 // Rota para admin excluir uma avaliação
@@ -61,6 +62,12 @@ router.get(
   "/exportar-estabelecimentos",
   adminAuthMiddleware,
   AdminController.exportActiveEstabelecimentos
+);
+
+router.get(
+  "/dashboard-stats",
+  adminAuthMiddleware,
+  AdminController.getDashboardStats
 );
 
 export default router;

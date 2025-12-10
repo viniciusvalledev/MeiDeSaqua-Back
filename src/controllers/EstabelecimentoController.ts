@@ -4,7 +4,8 @@ import { Request, Response } from "express";
 import EstabelecimentoService from "../services/EstabelecimentoService";
 import fs from "fs/promises";
 import path from "path";
-import Estabelecimento from "../entities/Estabelecimento.entity"; // Importar a entidade
+import Estabelecimento from "../entities/Estabelecimento.entity";
+import ContadorVisualizacao from "../entities/ContadorVisualizacao.entity";
 
 class EstabelecimentoController {
   private _deleteUploadedFilesOnFailure = async (req: Request) => {
@@ -174,7 +175,6 @@ class EstabelecimentoController {
     }
   };
 
-  // Seus outros métodos (solicitarExclusao, listarTodos, etc.) continuam os mesmos aqui...
   public solicitarExclusao = async (
     req: Request,
     res: Response
@@ -188,14 +188,13 @@ class EstabelecimentoController {
         !cpf_responsavel ||
         !emailEstabelecimento
       ) {
-        await this._deleteUploadedFilesOnFailure(req); // Apaga o ficheiro se os dados estiverem incompletos
+        await this._deleteUploadedFilesOnFailure(req);
         return res.status(400).json({
           message:
             "CNPJ, nome, CPF do responsável e e-mail são obrigatórios para a exclusão.",
         });
       }
 
-      // Valida se o estabelecimento existe antes de mover os ficheiros
       const estabelecimentoExistente = await Estabelecimento.findOne({
         where: { cnpj },
       });
@@ -207,7 +206,6 @@ class EstabelecimentoController {
         });
       }
 
-      // Usa a sua função auxiliar para mover o ficheiro e preparar os dados
       const dadosCompletos = await this._moveFilesAndPrepareData(req, {
         categoria: estabelecimentoExistente.categoria,
         nomeFantasia: estabelecimentoExistente.nomeFantasia,
@@ -219,7 +217,7 @@ class EstabelecimentoController {
         .status(200)
         .json({ message: "Solicitação de exclusão enviada para análise." });
     } catch (error: any) {
-      await this._deleteUploadedFilesOnFailure(req); // Garante que em qualquer erro, o ficheiro é removido
+      await this._deleteUploadedFilesOnFailure(req);
       return this._handleError(error, res);
     }
   };
@@ -249,9 +247,6 @@ class EstabelecimentoController {
     }
   };
 
-  // --- CÓDIGO CORRIGIDO AQUI ---
-  // Este é o método que estava dando o erro .toJSON()
-  // Agora ele apenas repassa o que o Service faz.
   public buscarPorId = async (
     req: Request,
     res: Response
@@ -259,7 +254,6 @@ class EstabelecimentoController {
     try {
       const id = parseInt(req.params.id);
 
-      // 1. O Service já busca o estabelecimento, calcula a média e retorna o objeto PRONTO.
       const estabelecimento = await EstabelecimentoService.buscarPorId(id);
 
       if (!estabelecimento) {
@@ -267,17 +261,11 @@ class EstabelecimentoController {
           message: "Estabelecimento não encontrado.",
         });
       }
-
-      // 2. O 'estabelecimento' que recebemos aqui JÁ É um JSON com a média.
-      //    Apenas retornamos o objeto diretamente.
       return res.status(200).json(estabelecimento);
     } catch (error: any) {
       return this._handleError(error, res);
     }
   };
-  // --- FIM DA CORREÇÃO ---
-
-  // Este é o método que estava 'undefined' segundo o log de erro
   public alterarStatus = async (
     req: Request,
     res: Response
@@ -298,6 +286,51 @@ class EstabelecimentoController {
       return res.status(200).json(estabelecimento);
     } catch (error: any) {
       return this._handleError(error, res);
+    }
+  };
+
+  public registrarVisualizacao = async (
+    req: Request,
+    res: Response
+  ): Promise<Response> => {
+    try {
+      const { identificador } = req.params;
+
+      if (!identificador) {
+        return res
+          .status(400)
+          .json({ message: "Identificador é obrigatório." });
+      }
+
+      let chaveFormatada = identificador.trim().toUpperCase();
+
+      if (
+        chaveFormatada !== "HOME" &&
+        chaveFormatada !== "ESPACO_MEI" &&
+        !chaveFormatada.startsWith("CAT_") &&
+        !chaveFormatada.startsWith("CURSO_")
+      ) {
+        chaveFormatada =
+          "CAT_" +
+          chaveFormatada
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^A-Z0-9]/g, "_");
+      }
+
+      const [registro] = await ContadorVisualizacao.findOrCreate({
+        where: { identificador: chaveFormatada },
+        defaults: { visualizacoes: 0 },
+      });
+
+      await registro.increment("visualizacoes");
+
+      return res.status(200).json({ success: true });
+    } catch (error: any) {
+      console.error("Erro ao registrar visualização:", error);
+      return res
+        .status(500)
+        .json({ message: "Erro interno ao registrar visualização." });
     }
   };
 }

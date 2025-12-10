@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
-import Estabelecimento, { StatusEstabelecimento } from "../entities/Estabelecimento.entity"; // Assumindo que Estabelecimento.entity.ts existe
+import Estabelecimento, {
+  StatusEstabelecimento,
+} from "../entities/Estabelecimento.entity"; // Assumindo que Estabelecimento.entity.ts existe
 import * as jwt from "jsonwebtoken";
 import ImagemProduto from "../entities/ImagemProduto.entity"; // Verifique se o caminho está correto
 import sequelize from "../config/database";
@@ -9,6 +11,7 @@ import EmailService from "../utils/EmailService";
 import EstabelecimentoService from "../services/EstabelecimentoService";
 import Avaliacao from "../entities/Avaliacao.entity";
 import Usuario from "../entities/Usuario.entity";
+import ContadorVisualizacao from "../entities/ContadorVisualizacao.entity";
 
 const ADMIN_USER = process.env.ADMIN_USER;
 
@@ -92,11 +95,13 @@ export class AdminController {
       const estabelecimento = await Estabelecimento.findByPk(id, {
         transaction,
         // ***** ALIAS CORRETO *****
-        include: [{ model: ImagemProduto, as: "produtosImg" }], 
+        include: [{ model: ImagemProduto, as: "produtosImg" }],
       });
       if (!estabelecimento) {
         await transaction.rollback();
-        return res.status(404).json({ message: "Estabelecimento não encontrado." });
+        return res
+          .status(404)
+          .json({ message: "Estabelecimento não encontrado." });
       }
       let emailInfo: { subject: string; html: string } | null = null;
 
@@ -145,8 +150,12 @@ export class AdminController {
               "tagsInvisiveis",
               "website",
               "instagram",
-              "descricaoDiferencial", "descricao", "objetivo", "justificativa",
-              "publicoAlvo", "impacto"
+              "descricaoDiferencial",
+              "descricao",
+              "objetivo",
+              "justificativa",
+              "publicoAlvo",
+              "impacto",
             ];
             // ***** FIM DA CORREÇÃO 1 *****
 
@@ -164,10 +173,18 @@ export class AdminController {
               const logoAntigaUrl = estabelecimento.logoUrl;
               if (logoAntigaUrl) {
                 try {
-                  const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
+                  const filePath = path.join(
+                    __dirname,
+                    "..",
+                    "..",
+                    logoAntigaUrl
+                  );
                   await fs.unlink(filePath);
                 } catch (err) {
-                  console.error(`AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`, err);
+                  console.error(
+                    `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
+                    err
+                  );
                 }
               }
               dadosParaAtualizar.logoUrl = dadosRecebidos.logo;
@@ -176,14 +193,14 @@ export class AdminController {
             // ***** CORREÇÃO 2: LÓGICA DE IMAGENS *****
             // (Trocado 'imagens' por 'produtos', que é o nome correto do campo)
             if (
-              dadosRecebidos.produtos && 
+              dadosRecebidos.produtos &&
               Array.isArray(dadosRecebidos.produtos) &&
               dadosRecebidos.produtos.length > 0
             ) {
               // ***** FIM DA CORREÇÃO 2 *****
-              
+
               const imagensAntigas = await ImagemProduto.findAll({
-                where: { estabelecimentoId: estabelecimento.estabelecimentoId }, 
+                where: { estabelecimentoId: estabelecimento.estabelecimentoId },
                 transaction,
               });
 
@@ -192,21 +209,24 @@ export class AdminController {
                   const filePath = path.join(__dirname, "..", "..", imagem.url);
                   await fs.unlink(filePath);
                 } catch (err) {
-                  console.error(`AVISO: Falha ao deletar imagem antiga: ${imagem.url}`, err);
+                  console.error(
+                    `AVISO: Falha ao deletar imagem antiga: ${imagem.url}`,
+                    err
+                  );
                 }
               }
 
               await ImagemProduto.destroy({
-                where: { estabelecimentoId: estabelecimento.estabelecimentoId }, 
+                where: { estabelecimentoId: estabelecimento.estabelecimentoId },
                 transaction,
               });
 
               // ***** CORREÇÃO 2 (continuação) *****
               const novasImagens = dadosRecebidos.produtos.map(
-              // ***** FIM DA CORREÇÃO 2 *****
+                // ***** FIM DA CORREÇÃO 2 *****
                 (url: string) => ({
                   url,
-                  estabelecimentoId : estabelecimento.estabelecimentoId, 
+                  estabelecimentoId: estabelecimento.estabelecimentoId,
                 })
               );
               await ImagemProduto.bulkCreate(novasImagens, { transaction });
@@ -214,7 +234,7 @@ export class AdminController {
 
             dadosParaAtualizar.dados_atualizacao = null;
             dadosParaAtualizar.status = StatusEstabelecimento.ATIVO;
-            dadosParaAtualizar.ativo = true; 
+            dadosParaAtualizar.ativo = true;
 
             await estabelecimento.update(dadosParaAtualizar, { transaction });
           } else {
@@ -225,7 +245,8 @@ export class AdminController {
           }
 
           emailInfo = {
-            subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
+            subject:
+              "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
             html: `
               <h1>Olá, ${estabelecimento.nomeResponsavel}!</h1>
               <p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada.</p>
@@ -235,12 +256,13 @@ export class AdminController {
               <p><strong>Equipe MeideSaquá</strong></p>
             `,
           };
-          break; 
+          break;
 
         case StatusEstabelecimento.PENDENTE_EXCLUSAO:
           // TODO: Adicionar lógica para deletar arquivos (logo, imagens) ANTES do destroy
           emailInfo = {
-            subject: "Seu estabelecimento foi removido da plataforma MeideSaquá",
+            subject:
+              "Seu estabelecimento foi removido da plataforma MeideSaquá",
             html: `
               <h1>Olá, ${estabelecimento.nomeResponsavel}.</h1>
               <p>Informamos que a sua solicitação para remover o estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> da nossa plataforma foi concluída com sucesso.</p>
@@ -261,19 +283,26 @@ export class AdminController {
       if (emailInfo && estabelecimento.emailEstabelecimento) {
         try {
           await EmailService.sendGenericEmail({
-            to: estabelecimento.emailEstabelecimento, 
+            to: estabelecimento.emailEstabelecimento,
             subject: emailInfo.subject,
             html: emailInfo.html,
           });
-          console.log(`Email de notificação enviado com sucesso para ${estabelecimento.emailEstabelecimento}`);
+          console.log(
+            `Email de notificação enviado com sucesso para ${estabelecimento.emailEstabelecimento}`
+          );
         } catch (error) {
-          console.error(`Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`, error);
+          console.error(
+            `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
+            error
+          );
         }
       } else if (emailInfo) {
-        console.warn(`Tentativa de enviar email para estabelecimento ID ${estabelecimento.estabelecimentoId} sem emailContato definido.`);
+        console.warn(
+          `Tentativa de enviar email para estabelecimento ID ${estabelecimento.estabelecimentoId} sem emailContato definido.`
+        );
       }
 
-      return res.status(200).json({ message: responseMessage }); 
+      return res.status(200).json({ message: responseMessage });
     } catch (error) {
       await transaction.rollback();
       console.error("ERRO DURANTE A APROVAÇÃO:", error);
@@ -284,17 +313,20 @@ export class AdminController {
   }
   static async editAndApproveRequest(req: Request, res: Response) {
     const { id } = req.params;
-    const adminEditedData = req.body; 
+    const adminEditedData = req.body;
 
     // ***** CORREÇÃO 1: Fazer o parse do urlsParaExcluir (que vem como string JSON) *****
-    let { urlsParaExcluir } = adminEditedData; 
-    if (urlsParaExcluir && typeof urlsParaExcluir === 'string') {
-        try {
-            urlsParaExcluir = JSON.parse(urlsParaExcluir);
-        } catch (e) {
-            console.error("Falha ao parsear urlsParaExcluir em editAndApproveRequest:", e);
-            urlsParaExcluir = [];
-        }
+    let { urlsParaExcluir } = adminEditedData;
+    if (urlsParaExcluir && typeof urlsParaExcluir === "string") {
+      try {
+        urlsParaExcluir = JSON.parse(urlsParaExcluir);
+      } catch (e) {
+        console.error(
+          "Falha ao parsear urlsParaExcluir em editAndApproveRequest:",
+          e
+        );
+        urlsParaExcluir = [];
+      }
     }
     // ***** FIM DA CORREÇÃO 1 *****
 
@@ -309,7 +341,9 @@ export class AdminController {
 
       if (!estabelecimento) {
         await transaction.rollback();
-        return res.status(404).json({ message: "Estabelecimento não encontrado." });
+        return res
+          .status(404)
+          .json({ message: "Estabelecimento não encontrado." });
       }
 
       let emailInfo: { subject: string; html: string } | null = null;
@@ -321,11 +355,11 @@ export class AdminController {
         estabelecimento.dados_atualizacao
       ) {
         // Lógica para LOGO
-        
+
         // ***** CORREÇÃO 2: Corrigir o bug do hasOwnProperty E checar por "DELETE" *****
         if (
-          ("logoUrl" in adminEditedData) && 
-          adminEditedData.logoUrl === "DELETE" 
+          "logoUrl" in adminEditedData &&
+          adminEditedData.logoUrl === "DELETE"
         ) {
           const logoAntigaUrl = estabelecimento.logoUrl || dadosRecebidos.logo;
           if (logoAntigaUrl) {
@@ -333,21 +367,26 @@ export class AdminController {
               const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
               await fs.unlink(filePath);
             } catch (err) {
-              console.error(`AVISO: Falha ao deletar logo: ${logoAntigaUrl}`, err);
+              console.error(
+                `AVISO: Falha ao deletar logo: ${logoAntigaUrl}`,
+                err
+              );
             }
           }
-          adminEditedData.logoUrl = null; 
+          adminEditedData.logoUrl = null;
         }
         // ***** FIM DA CORREÇÃO 2 *****
-
         else if (dadosRecebidos.logo) {
-          const logoAntigaUrl = estabelecimento.logoUrl; 
+          const logoAntigaUrl = estabelecimento.logoUrl;
           if (logoAntigaUrl) {
             try {
               const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
               await fs.unlink(filePath);
             } catch (err) {
-              console.error(`AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`, err);
+              console.error(
+                `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
+                err
+              );
             }
           }
           adminEditedData.logoUrl = dadosRecebidos.logo;
@@ -368,11 +407,13 @@ export class AdminController {
             try {
               const filePath = path.join(__dirname, "..", "..", imagem.url);
               await fs.unlink(filePath);
-            } catch (err) { /* ... log ... */ }
+            } catch (err) {
+              /* ... log ... */
+            }
           }
 
           await ImagemProduto.destroy({
-            where: { estabelecimentoId : estabelecimento.estabelecimentoId },
+            where: { estabelecimentoId: estabelecimento.estabelecimentoId },
             transaction,
           });
 
@@ -385,8 +426,7 @@ export class AdminController {
             estabelecimentoId: estabelecimento.estabelecimentoId,
           }));
           await ImagemProduto.bulkCreate(novasImagens, { transaction });
-        }
-        else if (
+        } else if (
           urlsParaExcluir &&
           Array.isArray(urlsParaExcluir) &&
           urlsParaExcluir.length > 0
@@ -403,7 +443,9 @@ export class AdminController {
             try {
               const filePath = path.join(__dirname, "..", "..", imagem.url);
               await fs.unlink(filePath);
-            } catch (err) { /* ... log ... */ }
+            } catch (err) {
+              /* ... log ... */
+            }
           }
 
           await ImagemProduto.destroy({
@@ -419,23 +461,25 @@ export class AdminController {
 
       await estabelecimento.update(
         {
-          ...adminEditedData, 
+          ...adminEditedData,
           status: StatusEstabelecimento.ATIVO,
           ativo: true,
-          dados_atualizacao: null, 
+          dados_atualizacao: null,
         },
         { transaction }
       );
 
       if (statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) {
         emailInfo = {
-            subject: "Seu cadastro no MeideSaquá foi Aprovado!", 
-            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>` 
+          subject: "Seu cadastro no MeideSaquá foi Aprovado!",
+          html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>`,
         };
-      } else if (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO) {
-        emailInfo = { 
-            subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!", 
-            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>` 
+      } else if (
+        statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO
+      ) {
+        emailInfo = {
+          subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
+          html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
         };
       }
 
@@ -449,7 +493,10 @@ export class AdminController {
             html: emailInfo.html,
           });
         } catch (error) {
-          console.error(`Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`, error);
+          console.error(
+            `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
+            error
+          );
         }
       }
 
@@ -484,23 +531,26 @@ export class AdminController {
   static async adminUpdateEstabelecimento(req: Request, res: Response) {
     const { id } = req.params;
     const adminEditedData = req.body;
-    
+
     // ***** CORREÇÃO 1: Fazer o parse do urlsParaExcluir (que vem como string JSON) *****
-    let { urlsParaExcluir } = adminEditedData; 
-    if (urlsParaExcluir && typeof urlsParaExcluir === 'string') {
-        try {
-            urlsParaExcluir = JSON.parse(urlsParaExcluir);
-        } catch (e) {
-            console.error("Falha ao parsear urlsParaExcluir em adminUpdateEstabelecimento:", e);
-            urlsParaExcluir = [];
-        }
+    let { urlsParaExcluir } = adminEditedData;
+    if (urlsParaExcluir && typeof urlsParaExcluir === "string") {
+      try {
+        urlsParaExcluir = JSON.parse(urlsParaExcluir);
+      } catch (e) {
+        console.error(
+          "Falha ao parsear urlsParaExcluir em adminUpdateEstabelecimento:",
+          e
+        );
+        urlsParaExcluir = [];
+      }
     }
     // ***** FIM DA CORREÇÃO 1 *****
 
     const transaction = await sequelize.transaction();
 
     try {
-      const estabelecimento = await Estabelecimento.findByPk(id, { 
+      const estabelecimento = await Estabelecimento.findByPk(id, {
         transaction,
         // ***** CORREÇÃO DO ALIAS AQUI *****
         include: [{ model: ImagemProduto, as: "produtosImg" }], // <-- Este é o alias correto
@@ -508,146 +558,160 @@ export class AdminController {
 
       if (!estabelecimento) {
         await transaction.rollback();
-        return res.status(404).json({ message: "Estabelecimento não encontrado." });
+        return res
+          .status(404)
+          .json({ message: "Estabelecimento não encontrado." });
       }
 
       // ****** LÓGICA COMBINADA (para Dashboard e Ativos) ******
       const statusOriginal = estabelecimento.status;
       const dadosRecebidos = (estabelecimento.dados_atualizacao || {}) as any;
-      let emailInfo: { subject: string; html: string } | null = null; 
+      let emailInfo: { subject: string; html: string } | null = null;
 
       // 1. LÓGICA DE LOGO (UNIFICADA)
       // ***** CORREÇÃO 2: Corrigir o bug do hasOwnProperty E checar por "DELETE" *****
       if (
-        ("logoUrl" in adminEditedData) && 
-        (adminEditedData.logoUrl === "DELETE" || adminEditedData.logoUrl === null)
+        "logoUrl" in adminEditedData &&
+        (adminEditedData.logoUrl === "DELETE" ||
+          adminEditedData.logoUrl === null)
       ) {
-      // ***** FIM DA CORREÇÃO 2 *****
-          const logoAntigaUrl = estabelecimento.logoUrl || dadosRecebidos.logo;
-          if (logoAntigaUrl) {
-              try {
-                  const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
-                  await fs.unlink(filePath);
-                  console.log(`Logo deletada: ${logoAntigaUrl}`);
-              } catch (err) {
-                  console.error(`AVISO: Falha ao deletar logo: ${logoAntigaUrl}`, err);
-              }
+        // ***** FIM DA CORREÇÃO 2 *****
+        const logoAntigaUrl = estabelecimento.logoUrl || dadosRecebidos.logo;
+        if (logoAntigaUrl) {
+          try {
+            const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
+            await fs.unlink(filePath);
+            console.log(`Logo deletada: ${logoAntigaUrl}`);
+          } catch (err) {
+            console.error(
+              `AVISO: Falha ao deletar logo: ${logoAntigaUrl}`,
+              err
+            );
           }
-          adminEditedData.logoUrl = null; 
-      } 
-      else if (
-          (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO || statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) &&
-          dadosRecebidos.logo
+        }
+        adminEditedData.logoUrl = null;
+      } else if (
+        (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO ||
+          statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) &&
+        dadosRecebidos.logo
       ) {
-          // Admin está aprovando uma *nova* logo de uma pendência
-          const logoAntigaUrl = estabelecimento.logoUrl;
-          if (logoAntigaUrl) {
-              try {
-                  const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
-                  await fs.unlink(filePath);
-              } catch (err) {
-                  console.error(`AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`, err);
-              }
+        // Admin está aprovando uma *nova* logo de uma pendência
+        const logoAntigaUrl = estabelecimento.logoUrl;
+        if (logoAntigaUrl) {
+          try {
+            const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
+            await fs.unlink(filePath);
+          } catch (err) {
+            console.error(
+              `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
+              err
+            );
           }
-          adminEditedData.logoUrl = dadosRecebidos.logo; 
+        }
+        adminEditedData.logoUrl = dadosRecebidos.logo;
       }
 
       // 2. LÓGICA DE IMAGENS DO PORTFÓLIO (UNIFICADA)
       if (
-          (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO || statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) &&
-          dadosRecebidos.imagens &&
-          Array.isArray(dadosRecebidos.imagens) &&
-          dadosRecebidos.imagens.length > 0
+        (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO ||
+          statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) &&
+        dadosRecebidos.imagens &&
+        Array.isArray(dadosRecebidos.imagens) &&
+        dadosRecebidos.imagens.length > 0
       ) {
-          // Cenário: APROVANDO uma atualização de portfólio
-          const imagensAntigas = await ImagemProduto.findAll({
-              where: { estabelecimentoId: estabelecimento.estabelecimentoId },
-              transaction,
-          });
+        // Cenário: APROVANDO uma atualização de portfólio
+        const imagensAntigas = await ImagemProduto.findAll({
+          where: { estabelecimentoId: estabelecimento.estabelecimentoId },
+          transaction,
+        });
 
-          for (const imagem of imagensAntigas) {
-              try {
-                  const filePath = path.join(__dirname, "..", "..", imagem.url);
-                  await fs.unlink(filePath);
-              } catch (err) { /* ... log ... */ }
+        for (const imagem of imagensAntigas) {
+          try {
+            const filePath = path.join(__dirname, "..", "..", imagem.url);
+            await fs.unlink(filePath);
+          } catch (err) {
+            /* ... log ... */
           }
+        }
 
-          await ImagemProduto.destroy({
-              where: { estabelecimentoId : estabelecimento.estabelecimentoId },
-              transaction,
-          });
+        await ImagemProduto.destroy({
+          where: { estabelecimentoId: estabelecimento.estabelecimentoId },
+          transaction,
+        });
 
-          const imagensParaCriar = dadosRecebidos.imagens.filter(
-              (url: string) => !(urlsParaExcluir && urlsParaExcluir.includes(url))
-          );
+        const imagensParaCriar = dadosRecebidos.imagens.filter(
+          (url: string) => !(urlsParaExcluir && urlsParaExcluir.includes(url))
+        );
 
-          const novasImagens = imagensParaCriar.map((url: string) => ({
-              url,
-              estabelecimentoId: estabelecimento.estabelecimentoId,
-          }));
-          await ImagemProduto.bulkCreate(novasImagens, { transaction });
-
-      } 
-      else if (
-          urlsParaExcluir &&
-          Array.isArray(urlsParaExcluir) && 
-          urlsParaExcluir.length > 0
+        const novasImagens = imagensParaCriar.map((url: string) => ({
+          url,
+          estabelecimentoId: estabelecimento.estabelecimentoId,
+        }));
+        await ImagemProduto.bulkCreate(novasImagens, { transaction });
+      } else if (
+        urlsParaExcluir &&
+        Array.isArray(urlsParaExcluir) &&
+        urlsParaExcluir.length > 0
       ) {
-          // Cenário: APENAS DELETANDO imagens (de um MEI ativo ou pendente)
-          const imagensParaDeletar = await ImagemProduto.findAll({
-              where: {
-                  url: urlsParaExcluir,
-                  estabelecimentoId: estabelecimento.estabelecimentoId,
-              },
-              transaction,
-          });
+        // Cenário: APENAS DELETANDO imagens (de um MEI ativo ou pendente)
+        const imagensParaDeletar = await ImagemProduto.findAll({
+          where: {
+            url: urlsParaExcluir,
+            estabelecimentoId: estabelecimento.estabelecimentoId,
+          },
+          transaction,
+        });
 
-          for (const imagem of imagensParaDeletar) {
-              try {
-                  const filePath = path.join(__dirname, "..", "..", imagem.url);
-                  await fs.unlink(filePath); 
-                  console.log(`Imagem de portfólio deletada: ${imagem.url}`);
-              } catch (err) {
-                  console.error(`AVISO: Falha ao deletar imagem de portfólio: ${imagem.url}`, err);
-              }
+        for (const imagem of imagensParaDeletar) {
+          try {
+            const filePath = path.join(__dirname, "..", "..", imagem.url);
+            await fs.unlink(filePath);
+            console.log(`Imagem de portfólio deletada: ${imagem.url}`);
+          } catch (err) {
+            console.error(
+              `AVISO: Falha ao deletar imagem de portfólio: ${imagem.url}`,
+              err
+            );
           }
+        }
 
-          await ImagemProduto.destroy({
-              where: { id: imagensParaDeletar.map((img) => img.id) },
-              transaction,
-          });
+        await ImagemProduto.destroy({
+          where: { id: imagensParaDeletar.map((img) => img.id) },
+          transaction,
+        });
       }
-      
+
       const updatePayload: any = {
-          ...adminEditedData,
+        ...adminEditedData,
       };
 
       if (
-          statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO ||
-          statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO
+        statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO ||
+        statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO
       ) {
-          updatePayload.status = StatusEstabelecimento.ATIVO;
-          updatePayload.ativo = true;
-          updatePayload.dados_atualizacao = null;
+        updatePayload.status = StatusEstabelecimento.ATIVO;
+        updatePayload.ativo = true;
+        updatePayload.dados_atualizacao = null;
 
-          if (statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) {
-              emailInfo = {
-                  subject: "Seu cadastro no MeideSaquá foi Aprovado!", 
-                  html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>` 
-              };
-            } else { 
-              emailInfo = { 
-                  subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!", 
-                  html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>` 
-              };
-            }
+        if (statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) {
+          emailInfo = {
+            subject: "Seu cadastro no MeideSaquá foi Aprovado!",
+            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>`,
+          };
+        } else {
+          emailInfo = {
+            subject:
+              "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
+            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
+          };
+        }
       }
 
       delete updatePayload.estabelecimentoId;
       delete updatePayload.urlsParaExcluir;
       // Precisamos checar com 'in' por causa do multer
-      if('dados_atualizacao' in updatePayload) {
-          updatePayload.dados_atualizacao = null;
+      if ("dados_atualizacao" in updatePayload) {
+        updatePayload.dados_atualizacao = null;
       }
 
       await estabelecimento.update(updatePayload, { transaction });
@@ -660,20 +724,26 @@ export class AdminController {
             subject: emailInfo.subject,
             html: emailInfo.html,
           });
-          console.log(`Email de aprovação/atualização enviado para ${estabelecimento.emailEstabelecimento}`);
+          console.log(
+            `Email de aprovação/atualização enviado para ${estabelecimento.emailEstabelecimento}`
+          );
         } catch (error) {
-          console.error(`Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`, error);
+          console.error(
+            `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
+            error
+          );
         }
       }
 
       return res
-          .status(200)
-          .json({ message: "Estabelecimento atualizado com sucesso." });
-
+        .status(200)
+        .json({ message: "Estabelecimento atualizado com sucesso." });
     } catch (error) {
-        await transaction.rollback();
-        console.error("ERRO DURANTE A ATUALIZAÇÃO ADMIN (UNIFICADA):", error); 
-        return res.status(500).json({ message: "Erro ao atualizar o estabelecimento." });
+      await transaction.rollback();
+      console.error("ERRO DURANTE A ATUALIZAÇÃO ADMIN (UNIFICADA):", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao atualizar o estabelecimento." });
     }
   }
 
@@ -684,12 +754,16 @@ export class AdminController {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        return res.status(400).json({ message: "ID do estabelecimento inválido." });
+        return res
+          .status(400)
+          .json({ message: "ID do estabelecimento inválido." });
       }
 
       const estabelecimento = await Estabelecimento.findByPk(id);
       if (!estabelecimento) {
-        return res.status(404).json({ message: "Estabelecimento não encontrado." });
+        return res
+          .status(404)
+          .json({ message: "Estabelecimento não encontrado." });
       }
 
       // TODO: Adicionar lógica para deletar arquivos (logo, imagens) ANTES do destroy
@@ -707,17 +781,21 @@ export class AdminController {
   static async rejectRequest(req: Request, res: Response) {
     const { id } = req.params;
     const { motivoRejeicao } = req.body;
-    const transaction = await sequelize.transaction(); 
+    const transaction = await sequelize.transaction();
     try {
-      const estabelecimento = await Estabelecimento.findByPk(id, { transaction });
+      const estabelecimento = await Estabelecimento.findByPk(id, {
+        transaction,
+      });
       if (!estabelecimento) {
         await transaction.rollback();
-        return res.status(404).json({ message: "Estabelecimento não encontrado." });
+        return res
+          .status(404)
+          .json({ message: "Estabelecimento não encontrado." });
       }
 
       let responseMessage = "Solicitação rejeitada com sucesso.";
       let emailInfo: { subject: string; html: string } | null = null;
-      const emailParaNotificar = estabelecimento.emailEstabelecimento; 
+      const emailParaNotificar = estabelecimento.emailEstabelecimento;
       const motivoHtml = motivoRejeicao
         ? `<p><strong>Motivo da Rejeição:</strong> ${motivoRejeicao}</p>`
         : "<p>Para mais detalhes, entre em contato conosco.</p>";
@@ -735,15 +813,16 @@ export class AdminController {
         estabelecimento.status === StatusEstabelecimento.PENDENTE_ATUALIZACAO ||
         estabelecimento.status === StatusEstabelecimento.PENDENTE_EXCLUSAO
       ) {
-        const statusAnterior = estabelecimento.status; 
+        const statusAnterior = estabelecimento.status;
         estabelecimento.status = StatusEstabelecimento.ATIVO;
         estabelecimento.dados_atualizacao = null;
-        await estabelecimento.save({ transaction }); 
+        await estabelecimento.save({ transaction });
 
         // TODO: Adicionar lógica para deletar arquivos pendentes de atualização
         if (statusAnterior === StatusEstabelecimento.PENDENTE_ATUALIZACAO) {
-           emailInfo = {
-            subject: "Sua solicitação de atualização no MeideSaquá foi Rejeitada",
+          emailInfo = {
+            subject:
+              "Sua solicitação de atualização no MeideSaquá foi Rejeitada",
             html: `<h1>Olá, ${estabelecimento.nomeResponsavel}.</h1><p>Informamos que a sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> não foi aprovada.</p><p>Os dados anteriores foram mantidos.</p>${motivoHtml}<br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
           };
         } else {
@@ -755,11 +834,12 @@ export class AdminController {
       } else {
         await transaction.rollback();
         return res.status(400).json({
-          message: "O estabelecimento não está em um estado pendente para rejeição.",
+          message:
+            "O estabelecimento não está em um estado pendente para rejeição.",
         });
       }
 
-      await transaction.commit(); 
+      await transaction.commit();
 
       if (emailInfo && emailParaNotificar) {
         try {
@@ -768,15 +848,20 @@ export class AdminController {
             subject: emailInfo.subject,
             html: emailInfo.html,
           });
-          console.log(`Email de rejeição enviado com sucesso para ${emailParaNotificar}`);
+          console.log(
+            `Email de rejeição enviado com sucesso para ${emailParaNotificar}`
+          );
         } catch (error) {
-          console.error(`Falha ao enviar email de rejeição para ${emailParaNotificar}:`, error);
+          console.error(
+            `Falha ao enviar email de rejeição para ${emailParaNotificar}:`,
+            error
+          );
         }
       }
 
       return res.status(200).json({ message: responseMessage });
     } catch (error) {
-      await transaction.rollback(); 
+      await transaction.rollback();
       console.error("Erro ao rejeitar a solicitação:", error);
       return res
         .status(500)
@@ -786,18 +871,23 @@ export class AdminController {
 
   static async getAvaliacoesByEstabelecimento(req: Request, res: Response) {
     try {
-      const { estabelecimentoId } = req.params; 
+      const { estabelecimentoId } = req.params;
 
-      const estabelecimento = await Estabelecimento.findByPk(estabelecimentoId, {
-        attributes: ["estabelecimentoId", "nomeFantasia", "categoria"], // Corrigido de nomeEstabelecimento
-      });
+      const estabelecimento = await Estabelecimento.findByPk(
+        estabelecimentoId,
+        {
+          attributes: ["estabelecimentoId", "nomeFantasia", "categoria"], // Corrigido de nomeEstabelecimento
+        }
+      );
 
       if (!estabelecimento) {
-        return res.status(404).json({ message: "Estabelecimento não encontrado." });
+        return res
+          .status(404)
+          .json({ message: "Estabelecimento não encontrado." });
       }
 
       const avaliacoes = await Avaliacao.findAll({
-        where: { estabelecimentoId: estabelecimentoId, parent_id: null }, 
+        where: { estabelecimentoId: estabelecimentoId, parent_id: null },
         include: [
           {
             model: Usuario,
@@ -818,14 +908,17 @@ export class AdminController {
           },
         ],
         order: [
-          ["avaliacoesId", "DESC"], 
-          [{ model: Avaliacao, as: "respostas" }, "avaliacoesId", "ASC"], 
+          ["avaliacoesId", "DESC"],
+          [{ model: Avaliacao, as: "respostas" }, "avaliacoesId", "ASC"],
         ],
       });
 
       return res.json({ estabelecimento, avaliacoes });
     } catch (error) {
-      console.error("Erro ao buscar avaliações por estabelecimento (admin):", error);
+      console.error(
+        "Erro ao buscar avaliações por estabelecimento (admin):",
+        error
+      );
       return res.status(500).json({ message: "Erro ao buscar avaliações." });
     }
   }
@@ -855,7 +948,9 @@ export class AdminController {
       const estabelecimentos = await EstabelecimentoService.listarTodos();
 
       if (!estabelecimentos || estabelecimentos.length === 0) {
-        return res.status(404).json({ message: "Nenhum estabelecimento ativo para exportar." });
+        return res
+          .status(404)
+          .json({ message: "Nenhum estabelecimento ativo para exportar." });
       }
 
       // Cabeçalhos do CSV
@@ -887,7 +982,11 @@ export class AdminController {
         if (field === null || field === undefined) return '""';
         const stringField = String(field);
         // Trata aspas, vírgulas e quebras de linha
-        if (stringField.includes('"') || stringField.includes(SEPARATOR) || stringField.includes('\n')) {
+        if (
+          stringField.includes('"') ||
+          stringField.includes(SEPARATOR) ||
+          stringField.includes("\n")
+        ) {
           return `"${stringField.replace(/"/g, '""')}"`;
         }
         return `"${stringField}"`;
@@ -916,7 +1015,7 @@ export class AdminController {
           est.venda,
           est.escala,
           est.status,
-          ""
+          "",
         ];
 
         csvContent += row.map(escapeCsvField).join(SEPARATOR) + "\n";
@@ -926,10 +1025,158 @@ export class AdminController {
       res.header("Content-Type", "text/csv; charset=utf-8");
       res.attachment("estabelecimentos_ativos_meidesaqua.csv");
       return res.status(200).send(csvContent);
-
     } catch (error) {
       console.error("Erro ao exportar estabelecimentos:", error);
-      return res.status(500).json({ message: "Erro ao gerar arquivo de exportação." });
+      return res
+        .status(500)
+        .json({ message: "Erro ao gerar arquivo de exportação." });
+    }
+  }
+
+  static async getDashboardStats(req: Request, res: Response) {
+    try {
+      const estabelecimentos = await Estabelecimento.findAll({
+        where: { status: StatusEstabelecimento.ATIVO },
+        attributes: ["estabelecimentoId", "categoria", "escala", "venda"],
+      });
+
+      const totalMeis = estabelecimentos.length;
+
+      const avaliacoes = await Avaliacao.findAll({
+        where: { parentId: null },
+        attributes: ["nota"],
+      });
+
+      const totalAvaliacoes = avaliacoes.length;
+      let somaNotas = 0;
+      const distribuicaoNotas = [0, 0, 0, 0, 0];
+
+      avaliacoes.forEach((a) => {
+        if (a.nota) {
+          somaNotas += a.nota;
+          const notaIndex = Math.floor(a.nota) - 1;
+          if (notaIndex >= 0 && notaIndex < 5) {
+            distribuicaoNotas[notaIndex]++;
+          }
+        }
+      });
+
+      const mediaAvaliacao =
+        totalAvaliacoes > 0 ? (somaNotas / totalAvaliacoes).toFixed(1) : 0;
+
+      const chartDistribuicaoNotas = distribuicaoNotas.map((qtd, index) => ({
+        nota: `${index + 1} Estrela${index !== 0 ? "s" : ""}`,
+        qtd: qtd,
+      }));
+
+      const categoriasMap: { [key: string]: number } = {};
+
+      estabelecimentos.forEach((e) => {
+        if (e.categoria) {
+          const catNome =
+            e.categoria.charAt(0).toUpperCase() +
+            e.categoria.slice(1).toLowerCase();
+          categoriasMap[catNome] = (categoriasMap[catNome] || 0) + 1;
+        }
+      });
+
+      const chartMeisPorCategoria = Object.entries(categoriasMap)
+        .map(([categoria, qtd]) => ({ categoria, qtd }))
+        .sort((a, b) => b.qtd - a.qtd)
+        .slice(0, 10);
+
+      const escalaMap: { [key: string]: number } = {};
+      estabelecimentos.forEach((e) => {
+        const esc = e.escala ? e.escala.toString() : "0";
+        const label = `Escala ${esc}`;
+        escalaMap[label] = (escalaMap[label] || 0) + 1;
+      });
+
+      const chartEscalaNegocio = Object.entries(escalaMap)
+        .map(([label, value]) => ({ label, value }))
+        .sort(
+          (a, b) =>
+            parseInt(b.label.replace(/\D/g, "")) -
+            parseInt(a.label.replace(/\D/g, ""))
+        );
+
+      const vendasMap: { [key: string]: number } = {};
+
+      estabelecimentos.forEach((e) => {
+        if (e.venda) {
+          const canais = e.venda.split(",").map((v) => v.trim());
+
+          canais.forEach((canal) => {
+            if (canal) {
+              const canalFormatado =
+                canal.charAt(0).toUpperCase() + canal.slice(1).toLowerCase();
+              vendasMap[canalFormatado] = (vendasMap[canalFormatado] || 0) + 1;
+            }
+          });
+        }
+      });
+
+      const chartVendas = Object.entries(vendasMap)
+        .map(([canal, qtd]) => ({ canal, qtd }))
+        .sort((a, b) => b.qtd - a.qtd);
+
+      const totalUsuarios = await Usuario.count();
+      const visualizacoesRaw = await ContadorVisualizacao.findAll();
+
+      const pageViews = { home: 0, espacoMei: 0, categoriasTotal: 0 };
+      const mapaVisualizacoes: { [key: string]: number } = {};
+      const mapaCursos: { [key: string]: number } = {};
+
+      visualizacoesRaw.forEach((v) => {
+        if (v.identificador === "HOME") {
+          pageViews.home = v.visualizacoes;
+        } else if (v.identificador === "ESPACO_MEI") {
+          pageViews.espacoMei = v.visualizacoes;
+        } else if (v.identificador.startsWith("CAT_")) {
+          let nomeCat = v.identificador
+            .replace("CAT_", "")
+            .replace(/_/g, " ")
+            .toLowerCase();
+          nomeCat = nomeCat.charAt(0).toUpperCase() + nomeCat.slice(1);
+
+          mapaVisualizacoes[nomeCat] = v.visualizacoes;
+          pageViews.categoriasTotal += v.visualizacoes;
+        } else if (v.identificador.startsWith("CURSO_")) {
+          let nomeCurso = v.identificador
+            .replace("CURSO_", "")
+            .replace(/_/g, " ")
+            .toLowerCase();
+          nomeCurso = nomeCurso.charAt(0).toUpperCase() + nomeCurso.slice(1);
+          mapaCursos[nomeCurso] = v.visualizacoes;
+        }
+      });
+
+      const chartCursos = Object.entries(mapaCursos)
+        .map(([curso, qtd]) => ({ curso, qtd }))
+        .sort((a, b) => b.qtd - a.qtd);
+
+      const chartVisualizacoesPorCategoria = Object.entries(mapaVisualizacoes)
+        .map(([categoria, views]) => ({ categoria, views }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 10);
+
+      // --- RETORNO LIMPO E SEMÂNTICO ---
+      return res.json({
+        totalMeis,
+        totalUsuarios,
+        totalAvaliacoes,
+        mediaAvaliacao,
+        chartMeisPorCategoria,
+        chartVisualizacoesPorCategoria,
+        chartDistribuicaoNotas,
+        chartEscalaNegocio,
+        pageViews,
+        chartVendas,
+        chartCursos,
+      });
+    } catch (error) {
+      console.error("Erro dashboard:", error);
+      return res.status(500).json({ message: "Erro ao buscar estatísticas." });
     }
   }
 }

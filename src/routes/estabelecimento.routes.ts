@@ -71,4 +71,9 @@ router.post(
 
 router.post("/:id/status", EstabelecimentoController.alterarStatus);
 
+router.post(
+  "/visualizacao/:identificador",
+  EstabelecimentoController.registrarVisualizacao
+);
+
 export default router;

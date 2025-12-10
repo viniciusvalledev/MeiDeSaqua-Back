@@ -4,6 +4,7 @@ import Usuario from "./Usuario.entity";
 import Estabelecimento from "./Estabelecimento.entity";
 import Avaliacao from "./Avaliacao.entity";
 import ImagemProduto from "./ImagemProduto.entity";
+import ContadorVisualizacao from "./ContadorVisualizacao.entity";
 
 // Usuário <-> Avaliação
 Usuario.hasMany(Avaliacao, { foreignKey: "usuarioId", as: "avaliacoes" });
@@ -42,4 +43,10 @@ Avaliacao.belongsTo(Avaliacao, {
 });
 // --- FIM DA ADIÇÃO ---
 
-export { Usuario, Estabelecimento, Avaliacao, ImagemProduto };
+export {
+  Usuario,
+  Estabelecimento,
+  Avaliacao,
+  ImagemProduto,
+  ContadorVisualizacao,
+};
