@@ -1035,6 +1035,7 @@ export class AdminController {
 
   static async getDashboardStats(req: Request, res: Response) {
     try {
+      // 1. Buscando dados básicos (mantido)
       const estabelecimentos = await Estabelecimento.findAll({
         where: { status: StatusEstabelecimento.ATIVO },
         attributes: ["estabelecimentoId", "categoria", "escala", "venda"],
@@ -1069,14 +1070,30 @@ export class AdminController {
         qtd: qtd,
       }));
 
+      // 2. Processamento dos Gráficos de Categoria, Escala e Vendas (mantido)
       const categoriasMap: { [key: string]: number } = {};
+      const escalaMap: { [key: string]: number } = {};
+      const vendasMap: { [key: string]: number } = {};
 
       estabelecimentos.forEach((e) => {
+        // Categoria
         if (e.categoria) {
-          const catNome =
-            e.categoria.charAt(0).toUpperCase() +
-            e.categoria.slice(1).toLowerCase();
+          const catNome = e.categoria.charAt(0).toUpperCase() + e.categoria.slice(1).toLowerCase();
           categoriasMap[catNome] = (categoriasMap[catNome] || 0) + 1;
+        }
+        // Escala
+        const esc = e.escala ? e.escala.toString() : "0";
+        const labelEscala = `Escala ${esc}`;
+        escalaMap[labelEscala] = (escalaMap[labelEscala] || 0) + 1;
+        // Vendas
+        if (e.venda) {
+          const canais = e.venda.split(",").map((v) => v.trim());
+          canais.forEach((canal) => {
+            if (canal) {
+              const canalFormatado = canal.charAt(0).toUpperCase() + canal.slice(1).toLowerCase();
+              vendasMap[canalFormatado] = (vendasMap[canalFormatado] || 0) + 1;
+            }
+          });
         }
       });
 
@@ -1085,47 +1102,25 @@ export class AdminController {
         .sort((a, b) => b.qtd - a.qtd)
         .slice(0, 10);
 
-      const escalaMap: { [key: string]: number } = {};
-      estabelecimentos.forEach((e) => {
-        const esc = e.escala ? e.escala.toString() : "0";
-        const label = `Escala ${esc}`;
-        escalaMap[label] = (escalaMap[label] || 0) + 1;
-      });
-
       const chartEscalaNegocio = Object.entries(escalaMap)
         .map(([label, value]) => ({ label, value }))
-        .sort(
-          (a, b) =>
-            parseInt(b.label.replace(/\D/g, "")) -
-            parseInt(a.label.replace(/\D/g, ""))
-        );
-
-      const vendasMap: { [key: string]: number } = {};
-
-      estabelecimentos.forEach((e) => {
-        if (e.venda) {
-          const canais = e.venda.split(",").map((v) => v.trim());
-
-          canais.forEach((canal) => {
-            if (canal) {
-              const canalFormatado =
-                canal.charAt(0).toUpperCase() + canal.slice(1).toLowerCase();
-              vendasMap[canalFormatado] = (vendasMap[canalFormatado] || 0) + 1;
-            }
-          });
-        }
-      });
+        .sort((a, b) => parseInt(b.label.replace(/\D/g, "")) - parseInt(a.label.replace(/\D/g, "")));
 
       const chartVendas = Object.entries(vendasMap)
         .map(([canal, qtd]) => ({ canal, qtd }))
         .sort((a, b) => b.qtd - a.qtd);
 
+      // 3. Processamento de Visualizações e Cliques (ATUALIZADO)
       const totalUsuarios = await Usuario.count();
       const visualizacoesRaw = await ContadorVisualizacao.findAll();
 
       const pageViews = { home: 0, espacoMei: 0, categoriasTotal: 0 };
       const mapaVisualizacoes: { [key: string]: number } = {};
       const mapaCursos: { [key: string]: number } = {};
+      
+      // NOVOS CONTADORES ESPECÍFICOS
+      const espacoMeiClicks = { gov: 0, wpp: 0, email: 0 };
+      let perfilCompartilhado = 0;
 
       visualizacoesRaw.forEach((v) => {
         if (v.identificador === "HOME") {
@@ -1133,21 +1128,24 @@ export class AdminController {
         } else if (v.identificador === "ESPACO_MEI") {
           pageViews.espacoMei = v.visualizacoes;
         } else if (v.identificador.startsWith("CAT_")) {
-          let nomeCat = v.identificador
-            .replace("CAT_", "")
-            .replace(/_/g, " ")
-            .toLowerCase();
+          let nomeCat = v.identificador.replace("CAT_", "").replace(/_/g, " ").toLowerCase();
           nomeCat = nomeCat.charAt(0).toUpperCase() + nomeCat.slice(1);
-
           mapaVisualizacoes[nomeCat] = v.visualizacoes;
           pageViews.categoriasTotal += v.visualizacoes;
         } else if (v.identificador.startsWith("CURSO_")) {
-          let nomeCurso = v.identificador
-            .replace("CURSO_", "")
-            .replace(/_/g, " ")
-            .toLowerCase();
+          let nomeCurso = v.identificador.replace("CURSO_", "").replace(/_/g, " ").toLowerCase();
           nomeCurso = nomeCurso.charAt(0).toUpperCase() + nomeCurso.slice(1);
           mapaCursos[nomeCurso] = v.visualizacoes;
+        }
+        // --- LÓGICA NOVA PARA OS LINKS ---
+        else if (v.identificador === "LINK_GOV") {
+          espacoMeiClicks.gov = v.visualizacoes;
+        } else if (v.identificador === "LINK_WPP") {
+          espacoMeiClicks.wpp = v.visualizacoes;
+        } else if (v.identificador === "LINK_EMAIL") {
+          espacoMeiClicks.email = v.visualizacoes;
+        } else if (v.identificador === "PROFILE_SHARE") {
+          perfilCompartilhado = v.visualizacoes;
         }
       });
 
@@ -1160,7 +1158,6 @@ export class AdminController {
         .sort((a, b) => b.views - a.views)
         .slice(0, 10);
 
-      // --- RETORNO LIMPO E SEMÂNTICO ---
       return res.json({
         totalMeis,
         totalUsuarios,
@@ -1173,6 +1170,8 @@ export class AdminController {
         pageViews,
         chartVendas,
         chartCursos,
+        espacoMeiClicks,
+        perfilCompartilhado
       });
     } catch (error) {
       console.error("Erro dashboard:", error);
