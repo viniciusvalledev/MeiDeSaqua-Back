@@ -304,11 +304,14 @@ class EstabelecimentoController {
 
       let chaveFormatada = identificador.trim().toUpperCase();
 
+      // --- AQUI ESTÁ A CORREÇÃO ---
       if (
         chaveFormatada !== "HOME" &&
         chaveFormatada !== "ESPACO_MEI" &&
+        chaveFormatada !== "PROFILE_SHARE" && // <--- NOVO: Permite o compartilhamento de perfil
         !chaveFormatada.startsWith("CAT_") &&
-        !chaveFormatada.startsWith("CURSO_")
+        !chaveFormatada.startsWith("CURSO_") &&
+        !chaveFormatada.startsWith("LINK_")   // <--- NOVO: Permite LINK_EMAIL, LINK_GOV, LINK_WPP
       ) {
         chaveFormatada =
           "CAT_" +
@@ -317,6 +320,7 @@ class EstabelecimentoController {
             .replace(/[\u0300-\u036f]/g, "")
             .replace(/[^A-Z0-9]/g, "_");
       }
+      // ----------------------------
 
       const [registro] = await ContadorVisualizacao.findOrCreate({
         where: { identificador: chaveFormatada },
