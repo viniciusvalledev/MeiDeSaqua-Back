@@ -11,6 +11,8 @@ import EmailService from "../utils/EmailService";
 import EstabelecimentoService from "../services/EstabelecimentoService";
 import Avaliacao from "../entities/Avaliacao.entity";
 import Usuario from "../entities/Usuario.entity";
+import * as bcrypt from "bcryptjs";
+import * as crypto from "crypto";
 import ContadorVisualizacao from "../entities/ContadorVisualizacao.entity";
 
 const ADMIN_USER = process.env.ADMIN_USER;
@@ -23,14 +25,14 @@ if (!ADMIN_USER || !ADMIN_PASSWORD || !JWT_SECRET) {
   console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
   console.error("ERRO CRÍTICO: Variáveis de ambiente do Admin não definidas.");
   console.error(
-    "Por favor, defina ADMIN_USER, ADMIN_PASSWORD, e ADMIN_JWT_SECRET"
+    "Por favor, defina ADMIN_USER, ADMIN_PASSWORD, e ADMIN_JWT_SECRET",
   );
   console.error(
-    "no seu ficheiro .env (ou .env.local) antes de iniciar o servidor."
+    "no seu ficheiro .env (ou .env.local) antes de iniciar o servidor.",
   );
   console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
   throw new Error(
-    "Credenciais de administrador ou segredo JWT não configurados."
+    "Credenciais de administrador ou segredo JWT não configurados.",
   );
 }
 
@@ -44,7 +46,7 @@ export class AdminController {
         JWT_SECRET as string,
         {
           expiresIn: "8h",
-        }
+        },
       );
       return res.json({ success: true, token });
     }
@@ -177,13 +179,13 @@ export class AdminController {
                     __dirname,
                     "..",
                     "..",
-                    logoAntigaUrl
+                    logoAntigaUrl,
                   );
                   await fs.unlink(filePath);
                 } catch (err) {
                   console.error(
                     `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
-                    err
+                    err,
                   );
                 }
               }
@@ -211,7 +213,7 @@ export class AdminController {
                 } catch (err) {
                   console.error(
                     `AVISO: Falha ao deletar imagem antiga: ${imagem.url}`,
-                    err
+                    err,
                   );
                 }
               }
@@ -227,7 +229,7 @@ export class AdminController {
                 (url: string) => ({
                   url,
                   estabelecimentoId: estabelecimento.estabelecimentoId,
-                })
+                }),
               );
               await ImagemProduto.bulkCreate(novasImagens, { transaction });
             }
@@ -288,17 +290,17 @@ export class AdminController {
             html: emailInfo.html,
           });
           console.log(
-            `Email de notificação enviado com sucesso para ${estabelecimento.emailEstabelecimento}`
+            `Email de notificação enviado com sucesso para ${estabelecimento.emailEstabelecimento}`,
           );
         } catch (error) {
           console.error(
             `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
-            error
+            error,
           );
         }
       } else if (emailInfo) {
         console.warn(
-          `Tentativa de enviar email para estabelecimento ID ${estabelecimento.estabelecimentoId} sem emailContato definido.`
+          `Tentativa de enviar email para estabelecimento ID ${estabelecimento.estabelecimentoId} sem emailContato definido.`,
         );
       }
 
@@ -323,7 +325,7 @@ export class AdminController {
       } catch (e) {
         console.error(
           "Falha ao parsear urlsParaExcluir em editAndApproveRequest:",
-          e
+          e,
         );
         urlsParaExcluir = [];
       }
@@ -369,7 +371,7 @@ export class AdminController {
             } catch (err) {
               console.error(
                 `AVISO: Falha ao deletar logo: ${logoAntigaUrl}`,
-                err
+                err,
               );
             }
           }
@@ -385,7 +387,7 @@ export class AdminController {
             } catch (err) {
               console.error(
                 `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
-                err
+                err,
               );
             }
           }
@@ -418,7 +420,8 @@ export class AdminController {
           });
 
           const imagensParaCriar = dadosRecebidos.imagens.filter(
-            (url: string) => !(urlsParaExcluir && urlsParaExcluir.includes(url))
+            (url: string) =>
+              !(urlsParaExcluir && urlsParaExcluir.includes(url)),
           );
 
           const novasImagens = imagensParaCriar.map((url: string) => ({
@@ -466,7 +469,7 @@ export class AdminController {
           ativo: true,
           dados_atualizacao: null,
         },
-        { transaction }
+        { transaction },
       );
 
       if (statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) {
@@ -495,7 +498,7 @@ export class AdminController {
         } catch (error) {
           console.error(
             `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
-            error
+            error,
           );
         }
       }
@@ -540,7 +543,7 @@ export class AdminController {
       } catch (e) {
         console.error(
           "Falha ao parsear urlsParaExcluir em adminUpdateEstabelecimento:",
-          e
+          e,
         );
         urlsParaExcluir = [];
       }
@@ -585,7 +588,7 @@ export class AdminController {
           } catch (err) {
             console.error(
               `AVISO: Falha ao deletar logo: ${logoAntigaUrl}`,
-              err
+              err,
             );
           }
         }
@@ -604,7 +607,7 @@ export class AdminController {
           } catch (err) {
             console.error(
               `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
-              err
+              err,
             );
           }
         }
@@ -640,7 +643,7 @@ export class AdminController {
         });
 
         const imagensParaCriar = dadosRecebidos.imagens.filter(
-          (url: string) => !(urlsParaExcluir && urlsParaExcluir.includes(url))
+          (url: string) => !(urlsParaExcluir && urlsParaExcluir.includes(url)),
         );
 
         const novasImagens = imagensParaCriar.map((url: string) => ({
@@ -670,7 +673,7 @@ export class AdminController {
           } catch (err) {
             console.error(
               `AVISO: Falha ao deletar imagem de portfólio: ${imagem.url}`,
-              err
+              err,
             );
           }
         }
@@ -725,12 +728,12 @@ export class AdminController {
             html: emailInfo.html,
           });
           console.log(
-            `Email de aprovação/atualização enviado para ${estabelecimento.emailEstabelecimento}`
+            `Email de aprovação/atualização enviado para ${estabelecimento.emailEstabelecimento}`,
           );
         } catch (error) {
           console.error(
             `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
-            error
+            error,
           );
         }
       }
@@ -749,7 +752,7 @@ export class AdminController {
 
   static adminDeleteEstabelecimento = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const id = parseInt(req.params.id);
@@ -849,12 +852,12 @@ export class AdminController {
             html: emailInfo.html,
           });
           console.log(
-            `Email de rejeição enviado com sucesso para ${emailParaNotificar}`
+            `Email de rejeição enviado com sucesso para ${emailParaNotificar}`,
           );
         } catch (error) {
           console.error(
             `Falha ao enviar email de rejeição para ${emailParaNotificar}:`,
-            error
+            error,
           );
         }
       }
@@ -877,7 +880,7 @@ export class AdminController {
         estabelecimentoId,
         {
           attributes: ["estabelecimentoId", "nomeFantasia", "categoria"], // Corrigido de nomeEstabelecimento
-        }
+        },
       );
 
       if (!estabelecimento) {
@@ -917,7 +920,7 @@ export class AdminController {
     } catch (error) {
       console.error(
         "Erro ao buscar avaliações por estabelecimento (admin):",
-        error
+        error,
       );
       return res.status(500).json({ message: "Erro ao buscar avaliações." });
     }
@@ -943,6 +946,7 @@ export class AdminController {
       return res.status(500).json({ message: "Erro ao excluir a avaliação." });
     }
   }
+
   static async exportActiveEstabelecimentos(req: Request, res: Response) {
     try {
       const estabelecimentos = await EstabelecimentoService.listarTodos();
@@ -1078,7 +1082,9 @@ export class AdminController {
       estabelecimentos.forEach((e) => {
         // Categoria
         if (e.categoria) {
-          const catNome = e.categoria.charAt(0).toUpperCase() + e.categoria.slice(1).toLowerCase();
+          const catNome =
+            e.categoria.charAt(0).toUpperCase() +
+            e.categoria.slice(1).toLowerCase();
           categoriasMap[catNome] = (categoriasMap[catNome] || 0) + 1;
         }
         // Escala
@@ -1090,7 +1096,8 @@ export class AdminController {
           const canais = e.venda.split(",").map((v) => v.trim());
           canais.forEach((canal) => {
             if (canal) {
-              const canalFormatado = canal.charAt(0).toUpperCase() + canal.slice(1).toLowerCase();
+              const canalFormatado =
+                canal.charAt(0).toUpperCase() + canal.slice(1).toLowerCase();
               vendasMap[canalFormatado] = (vendasMap[canalFormatado] || 0) + 1;
             }
           });
@@ -1104,7 +1111,11 @@ export class AdminController {
 
       const chartEscalaNegocio = Object.entries(escalaMap)
         .map(([label, value]) => ({ label, value }))
-        .sort((a, b) => parseInt(b.label.replace(/\D/g, "")) - parseInt(a.label.replace(/\D/g, "")));
+        .sort(
+          (a, b) =>
+            parseInt(b.label.replace(/\D/g, "")) -
+            parseInt(a.label.replace(/\D/g, "")),
+        );
 
       const chartVendas = Object.entries(vendasMap)
         .map(([canal, qtd]) => ({ canal, qtd }))
@@ -1117,7 +1128,7 @@ export class AdminController {
       const pageViews = { home: 0, espacoMei: 0, categoriasTotal: 0 };
       const mapaVisualizacoes: { [key: string]: number } = {};
       const mapaCursos: { [key: string]: number } = {};
-      
+
       // NOVOS CONTADORES ESPECÍFICOS
       const espacoMeiClicks = { gov: 0, wpp: 0, email: 0 };
       let perfilCompartilhado = 0;
@@ -1128,12 +1139,18 @@ export class AdminController {
         } else if (v.identificador === "ESPACO_MEI") {
           pageViews.espacoMei = v.visualizacoes;
         } else if (v.identificador.startsWith("CAT_")) {
-          let nomeCat = v.identificador.replace("CAT_", "").replace(/_/g, " ").toLowerCase();
+          let nomeCat = v.identificador
+            .replace("CAT_", "")
+            .replace(/_/g, " ")
+            .toLowerCase();
           nomeCat = nomeCat.charAt(0).toUpperCase() + nomeCat.slice(1);
           mapaVisualizacoes[nomeCat] = v.visualizacoes;
           pageViews.categoriasTotal += v.visualizacoes;
         } else if (v.identificador.startsWith("CURSO_")) {
-          let nomeCurso = v.identificador.replace("CURSO_", "").replace(/_/g, " ").toLowerCase();
+          let nomeCurso = v.identificador
+            .replace("CURSO_", "")
+            .replace(/_/g, " ")
+            .toLowerCase();
           nomeCurso = nomeCurso.charAt(0).toUpperCase() + nomeCurso.slice(1);
           mapaCursos[nomeCurso] = v.visualizacoes;
         }
@@ -1171,11 +1188,195 @@ export class AdminController {
         chartVendas,
         chartCursos,
         espacoMeiClicks,
-        perfilCompartilhado
+        perfilCompartilhado,
       });
     } catch (error) {
       console.error("Erro dashboard:", error);
       return res.status(500).json({ message: "Erro ao buscar estatísticas." });
+    }
+  }
+
+  // =========================================================================
+  // GESTÃO DE USUÁRIOS
+  // =========================================================================
+
+  static async getAllUsers(req: Request, res: Response) {
+    try {
+      const usuarios = await Usuario.findAll({
+        attributes: {
+          exclude: ["password", "confirmationToken", "resetPasswordToken"],
+        },
+        order: [["usuarioId", "ASC"]],
+      });
+      return res.json(usuarios);
+    } catch (error) {
+      console.error("Erro ao buscar usuários (admin):", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao buscar lista de usuários." });
+    }
+  }
+
+  static async adminUpdateUser(req: Request, res: Response) {
+    const { id } = req.params;
+    const { nomeCompleto, email, username, enabled } = req.body;
+
+    const transaction = await sequelize.transaction();
+
+    try {
+      const usuario = await Usuario.findByPk(id, { transaction });
+
+      if (!usuario) {
+        await transaction.rollback();
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      const dadosAtualizacao: any = {};
+      if (nomeCompleto !== undefined)
+        dadosAtualizacao.nomeCompleto = nomeCompleto;
+      if (email !== undefined) dadosAtualizacao.email = email;
+      if (username !== undefined) dadosAtualizacao.username = username;
+      if (enabled !== undefined) dadosAtualizacao.enabled = enabled;
+
+      await usuario.update(dadosAtualizacao, { transaction });
+      await transaction.commit();
+
+      return res
+        .status(200)
+        .json({ message: "Usuário atualizado com sucesso." });
+    } catch (error) {
+      await transaction.rollback();
+      console.error("Erro ao atualizar usuário (admin):", error);
+      return res.status(500).json({ message: "Erro ao atualizar usuário." });
+    }
+  }
+
+  static async adminDeleteUser(req: Request, res: Response) {
+    const { id } = req.params;
+
+    const transaction = await sequelize.transaction();
+
+    try {
+      const usuario = await Usuario.findByPk(id, { transaction });
+
+      if (!usuario) {
+        await transaction.rollback();
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      const avaliacoesDoUsuario = await Avaliacao.findAll({
+        where: { usuarioId: id },
+        attributes: ["avaliacoesId"],
+        transaction,
+      });
+
+      const idsAvaliacoes = avaliacoesDoUsuario.map((a) => a.avaliacoesId);
+
+      if (idsAvaliacoes.length > 0) {
+        await Avaliacao.destroy({
+          where: { parentId: idsAvaliacoes },
+          transaction,
+        });
+
+        await Avaliacao.destroy({
+          where: { usuarioId: id },
+          transaction,
+        });
+      }
+
+      await usuario.destroy({ transaction });
+
+      await transaction.commit();
+      return res
+        .status(200)
+        .json({
+          message: "Usuário e todos os seus dados vinculados foram excluídos.",
+        });
+    } catch (error) {
+      await transaction.rollback();
+      console.error("Erro ao excluir usuário (admin):", error);
+      return res.status(500).json({ message: "Erro ao excluir usuário." });
+    }
+  }
+
+  static async adminChangePassword(req: Request, res: Response) {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "A senha deve ter pelo menos 6 caracteres." });
+    }
+
+    try {
+      const usuario = await Usuario.findByPk(id);
+
+      if (!usuario) {
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      usuario.password = hashedPassword;
+      usuario.resetPasswordToken = null;
+      usuario.resetPasswordTokenExpiry = null;
+
+      await usuario.save();
+
+      return res.status(200).json({ message: "Senha alterada com sucesso." });
+    } catch (error) {
+      console.error("Erro ao alterar senha (admin):", error);
+      return res.status(500).json({ message: "Erro ao alterar a senha." });
+    }
+  }
+
+  static async resendConfirmationEmail(req: Request, res: Response) {
+    const { id } = req.params;
+
+    try {
+      const usuario = await Usuario.findByPk(id);
+
+      if (!usuario) {
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      if (usuario.enabled) {
+        return res
+          .status(400)
+          .json({ message: "Este usuário já está confirmado e ativo." });
+      }
+
+      // Gera um novo token de confirmação
+      const confirmationToken = crypto.randomBytes(20).toString("hex");
+      usuario.confirmationToken = confirmationToken;
+      await usuario.save();
+
+      const confirmUrl = `${process.env.FRONTEND_URL}/confirmar-conta?token=${confirmationToken}`;
+
+      const emailHtml = `
+        <h1>Confirmação de Conta (Reenvio Admin)</h1>
+        <p>Olá, ${usuario.nomeCompleto}.</p>
+        <p>Um administrador solicitou o reenvio do seu link de confirmação.</p>
+        <p>Por favor, confirme seu cadastro clicando no link abaixo:</p>
+        <a href="${confirmUrl}" target="_blank">Confirmar minha conta</a>
+        <p>Se você não solicitou isso, ignore este email.</p>
+      `;
+
+      await EmailService.sendGenericEmail({
+        to: usuario.email,
+        subject: "Confirme sua conta no MeideSaquá",
+        html: emailHtml,
+      });
+
+      return res
+        .status(200)
+        .json({ message: "Email de confirmação reenviado com sucesso." });
+    } catch (error) {
+      console.error("Erro ao reenviar confirmação (admin):", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao enviar email de confirmação." });
     }
   }
 }
