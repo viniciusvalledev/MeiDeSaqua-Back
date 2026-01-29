@@ -36,6 +36,59 @@ if (!ADMIN_USER || !ADMIN_PASSWORD || !JWT_SECRET) {
   );
 }
 
+const moveAdminFile = async (
+  file: Express.Multer.File,
+  categoria: string,
+  nomeFantasia: string,
+): Promise<string> => {
+  const sanitize = (name: string) =>
+    (name || "").replace(/[^a-z0-9]/gi, "_").toLowerCase();
+
+  const safeCategoria = sanitize(categoria || "geral");
+  const safeNomeFantasia = sanitize(nomeFantasia || "mei_sem_nome");
+
+  // Define o diretório de destino: uploads/categoria/nome_fantasia
+  const targetDir = path.resolve("uploads", safeCategoria, safeNomeFantasia);
+
+  // Garante que o diretório existe
+  await fs.mkdir(targetDir, { recursive: true });
+
+  // --- LÓGICA DE NOMEAÇÃO ALTERADA AQUI ---
+  let fileName = `${Date.now()}-${file.originalname.replace(/\s/g, "_")}`;
+
+  // Se o arquivo for o CCMEI, forçamos o nome para "CCMEI" mantendo a extensão
+  if (file.fieldname === "ccmei") {
+    const ext = path.extname(file.originalname); // ex: .pdf, .jpg
+    fileName = `CCMEI${ext}`;
+  }
+
+  const newPath = path.join(targetDir, fileName);
+
+  // Lógica Híbrida: Suporta MemoryStorage (buffer) e DiskStorage (path)
+  if (file.path) {
+    // Se o arquivo já existe temporariamente no disco (DiskStorage)
+    try {
+      await fs.rename(file.path, newPath);
+    } catch (error) {
+      // Fallback: copia e deleta se estiver em partições diferentes
+      await fs.copyFile(file.path, newPath);
+      await fs.unlink(file.path);
+    }
+  } else if (file.buffer) {
+    // Se o arquivo está na memória (MemoryStorage - padrão do multer())
+    await fs.writeFile(newPath, file.buffer);
+  } else {
+    throw new Error(
+      "Arquivo recebido sem 'path' ou 'buffer'. Verifique a configuração do Multer.",
+    );
+  }
+
+  // Retorna o caminho relativo (estilo URL) para salvar no banco
+  return path
+    .join("uploads", safeCategoria, safeNomeFantasia, fileName)
+    .replace(/\\/g, "/");
+};
+
 export class AdminController {
   static async login(req: Request, res: Response) {
     const { username, password } = req.body;
@@ -247,16 +300,8 @@ export class AdminController {
           }
 
           emailInfo = {
-            subject:
-              "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
-            html: `
-              <h1>Olá, ${estabelecimento.nomeResponsavel}!</h1>
-              <p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada.</p>
-              <p>As novas informações já estão visíveis para todos na plataforma.</p>
-              <br>
-              <p>Atenciosamente,</p>
-              <p><strong>Equipe MeideSaquá</strong></p>
-            `,
+            subject: "Seu cadastro no MeideSaquá foi Aprovado!",
+            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>`,
           };
           break;
 
@@ -313,32 +358,27 @@ export class AdminController {
         .json({ message: "Erro ao aprovar a solicitação." });
     }
   }
+
   static async editAndApproveRequest(req: Request, res: Response) {
     const { id } = req.params;
     const adminEditedData = req.body;
+    const files = req.files as Express.Multer.File[]; // Recebe arquivos do Multer
 
-    // ***** CORREÇÃO 1: Fazer o parse do urlsParaExcluir (que vem como string JSON) *****
     let { urlsParaExcluir } = adminEditedData;
     if (urlsParaExcluir && typeof urlsParaExcluir === "string") {
       try {
         urlsParaExcluir = JSON.parse(urlsParaExcluir);
       } catch (e) {
-        console.error(
-          "Falha ao parsear urlsParaExcluir em editAndApproveRequest:",
-          e,
-        );
         urlsParaExcluir = [];
       }
     }
-    // ***** FIM DA CORREÇÃO 1 *****
 
     const transaction = await sequelize.transaction();
 
     try {
       const estabelecimento = await Estabelecimento.findByPk(id, {
         transaction,
-        // ***** CORREÇÃO DO ALIAS AQUI *****
-        include: [{ model: ImagemProduto, as: "produtosImg" }], // <-- Este é o alias correto
+        include: [{ model: ImagemProduto, as: "produtosImg" }],
       });
 
       if (!estabelecimento) {
@@ -348,120 +388,124 @@ export class AdminController {
           .json({ message: "Estabelecimento não encontrado." });
       }
 
-      let emailInfo: { subject: string; html: string } | null = null;
       const statusOriginal = estabelecimento.status;
       const dadosRecebidos = (estabelecimento.dados_atualizacao || {}) as any;
 
-      if (
-        statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO &&
-        estabelecimento.dados_atualizacao
-      ) {
-        // Lógica para LOGO
+      // 1. Processar UPLOADS do Admin (Logo ou CCMEI novos)
+      // Como estamos editando, usamos a categoria/nome ATUAL do estabelecimento ou do update
+      const categoriaFinal =
+        adminEditedData.categoria || estabelecimento.categoria;
+      const nomeFinal =
+        adminEditedData.nomeFantasia || estabelecimento.nomeFantasia;
 
-        // ***** CORREÇÃO 2: Corrigir o bug do hasOwnProperty E checar por "DELETE" *****
-        if (
-          "logoUrl" in adminEditedData &&
-          adminEditedData.logoUrl === "DELETE"
-        ) {
-          const logoAntigaUrl = estabelecimento.logoUrl || dadosRecebidos.logo;
-          if (logoAntigaUrl) {
-            try {
-              const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
-              await fs.unlink(filePath);
-            } catch (err) {
-              console.error(
-                `AVISO: Falha ao deletar logo: ${logoAntigaUrl}`,
-                err,
-              );
+      if (files && files.length > 0) {
+        for (const file of files) {
+          if (file.fieldname === "ccmei") {
+            // Deletar antigo se existir
+            if (estabelecimento.ccmeiUrl) {
+              await fs
+                .unlink(path.resolve(estabelecimento.ccmeiUrl))
+                .catch(() => {});
             }
+            const newCcmeiUrl = await moveAdminFile(
+              file,
+              categoriaFinal,
+              nomeFinal,
+            );
+            adminEditedData.ccmeiUrl = newCcmeiUrl;
           }
-          adminEditedData.logoUrl = null;
+          if (file.fieldname === "logo") {
+            if (estabelecimento.logoUrl) {
+              await fs
+                .unlink(path.resolve(estabelecimento.logoUrl))
+                .catch(() => {});
+            }
+            const newLogoUrl = await moveAdminFile(
+              file,
+              categoriaFinal,
+              nomeFinal,
+            );
+            adminEditedData.logoUrl = newLogoUrl;
+          }
         }
-        // ***** FIM DA CORREÇÃO 2 *****
-        else if (dadosRecebidos.logo) {
-          const logoAntigaUrl = estabelecimento.logoUrl;
-          if (logoAntigaUrl) {
-            try {
-              const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
-              await fs.unlink(filePath);
-            } catch (err) {
-              console.error(
-                `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
-                err,
-              );
-            }
-          }
+      }
+
+      // 2. Processar DELETE de CCMEI e LOGO via string
+      if (adminEditedData.ccmeiUrl === "DELETE") {
+        if (estabelecimento.ccmeiUrl) {
+          await fs
+            .unlink(path.resolve(estabelecimento.ccmeiUrl))
+            .catch(() => {});
+        }
+        adminEditedData.ccmeiUrl = null;
+      }
+      if (adminEditedData.logoUrl === "DELETE") {
+        if (estabelecimento.logoUrl) {
+          await fs
+            .unlink(path.resolve(estabelecimento.logoUrl))
+            .catch(() => {});
+        }
+        adminEditedData.logoUrl = null;
+      }
+
+      // 3. Mesclar com dados_atualizacao se existirem (para o que o admin NÃO alterou)
+      if (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO) {
+        // Se o admin não enviou um novo CCMEI nem mandou deletar, e o usuário pediu alteração de CCMEI:
+        if (
+          !adminEditedData.ccmeiUrl &&
+          adminEditedData.ccmeiUrl !== null &&
+          dadosRecebidos.ccmei
+        ) {
+          // Deletar o do banco antigo
+          if (estabelecimento.ccmeiUrl)
+            await fs
+              .unlink(path.resolve(estabelecimento.ccmeiUrl))
+              .catch(() => {});
+          adminEditedData.ccmeiUrl = dadosRecebidos.ccmei;
+        }
+
+        // Se admin não mexeu na logo, mas user pediu troca:
+        if (
+          !adminEditedData.logoUrl &&
+          adminEditedData.logoUrl !== null &&
+          dadosRecebidos.logo
+        ) {
+          if (estabelecimento.logoUrl)
+            await fs
+              .unlink(path.resolve(estabelecimento.logoUrl))
+              .catch(() => {});
           adminEditedData.logoUrl = dadosRecebidos.logo;
         }
 
-        // Lógica para IMAGENS
-        if (
-          dadosRecebidos.imagens &&
-          Array.isArray(dadosRecebidos.imagens) &&
-          dadosRecebidos.imagens.length > 0
-        ) {
-          const imagensAntigas = await ImagemProduto.findAll({
+        // Tratamento de Imagens do Produto (Mantido lógica anterior)
+        if (dadosRecebidos.produtos && Array.isArray(dadosRecebidos.produtos)) {
+          // Limpa antigas
+          const imgsAntigas = await ImagemProduto.findAll({
             where: { estabelecimentoId: estabelecimento.estabelecimentoId },
             transaction,
           });
-
-          for (const imagem of imagensAntigas) {
-            try {
-              const filePath = path.join(__dirname, "..", "..", imagem.url);
-              await fs.unlink(filePath);
-            } catch (err) {
-              /* ... log ... */
-            }
-          }
-
+          for (const i of imgsAntigas)
+            await fs.unlink(path.resolve(i.url)).catch(() => {});
           await ImagemProduto.destroy({
             where: { estabelecimentoId: estabelecimento.estabelecimentoId },
             transaction,
           });
 
-          const imagensParaCriar = dadosRecebidos.imagens.filter(
-            (url: string) =>
-              !(urlsParaExcluir && urlsParaExcluir.includes(url)),
+          // Filtra excluídas pelo admin e cria novas
+          const imgsParaCriar = dadosRecebidos.produtos.filter(
+            (u: string) => !urlsParaExcluir.includes(u),
           );
-
-          const novasImagens = imagensParaCriar.map((url: string) => ({
-            url,
+          const payloadImgs = imgsParaCriar.map((u: string) => ({
+            url: u,
             estabelecimentoId: estabelecimento.estabelecimentoId,
           }));
-          await ImagemProduto.bulkCreate(novasImagens, { transaction });
-        } else if (
-          urlsParaExcluir &&
-          Array.isArray(urlsParaExcluir) &&
-          urlsParaExcluir.length > 0
-        ) {
-          const imagensParaDeletar = await ImagemProduto.findAll({
-            where: {
-              url: urlsParaExcluir,
-              estabelecimentoId: estabelecimento.estabelecimentoId,
-            },
-            transaction,
-          });
-
-          for (const imagem of imagensParaDeletar) {
-            try {
-              const filePath = path.join(__dirname, "..", "..", imagem.url);
-              await fs.unlink(filePath);
-            } catch (err) {
-              /* ... log ... */
-            }
-          }
-
-          await ImagemProduto.destroy({
-            where: {
-              id: imagensParaDeletar.map((img) => img.id),
-            },
-            transaction,
-          });
+          await ImagemProduto.bulkCreate(payloadImgs, { transaction });
         }
       }
 
       delete adminEditedData.urlsParaExcluir;
 
+      // Atualiza o registro principal
       await estabelecimento.update(
         {
           ...adminEditedData,
@@ -472,35 +516,15 @@ export class AdminController {
         { transaction },
       );
 
-      if (statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) {
-        emailInfo = {
-          subject: "Seu cadastro no MeideSaquá foi Aprovado!",
-          html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>`,
-        };
-      } else if (
-        statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO
-      ) {
-        emailInfo = {
-          subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
-          html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
-        };
-      }
-
       await transaction.commit();
 
-      if (emailInfo && estabelecimento.emailEstabelecimento) {
-        try {
-          await EmailService.sendGenericEmail({
-            to: estabelecimento.emailEstabelecimento,
-            subject: emailInfo.subject,
-            html: emailInfo.html,
-          });
-        } catch (error) {
-          console.error(
-            `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
-            error,
-          );
-        }
+      // Envia email (mantido simplificado)
+      if (estabelecimento.emailEstabelecimento) {
+        EmailService.sendGenericEmail({
+          to: estabelecimento.emailEstabelecimento,
+          subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
+          html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
+        }).catch(() => {});
       }
 
       return res
@@ -508,10 +532,10 @@ export class AdminController {
         .json({ message: "Estabelecimento editado e aprovado com sucesso." });
     } catch (error) {
       await transaction.rollback();
-      console.error("ERRO DURANTE A EDIÇÃO E APROVAÇÃO:", error);
+      console.error("ERRO EDIT_AND_APPROVE:", error);
       return res
         .status(500)
-        .json({ message: "Erro ao editar e aprovar a solicitação." });
+        .json({ message: "Erro ao processar solicitação." });
     }
   }
 
@@ -529,34 +553,27 @@ export class AdminController {
   }
 
   // ***** FUNÇÃO UNIFICADA (CHAMADA PELO DASHBOARD E PÁGINA DE ATIVOS) *****
-  // Esta função agora é chamada tanto pelo Dashboard quanto pela página de Ativos
-  // e sabe o que fazer em ambos os casos.
+
   static async adminUpdateEstabelecimento(req: Request, res: Response) {
     const { id } = req.params;
     const adminEditedData = req.body;
+    const files = req.files as Express.Multer.File[];
 
-    // ***** CORREÇÃO 1: Fazer o parse do urlsParaExcluir (que vem como string JSON) *****
     let { urlsParaExcluir } = adminEditedData;
     if (urlsParaExcluir && typeof urlsParaExcluir === "string") {
       try {
         urlsParaExcluir = JSON.parse(urlsParaExcluir);
       } catch (e) {
-        console.error(
-          "Falha ao parsear urlsParaExcluir em adminUpdateEstabelecimento:",
-          e,
-        );
         urlsParaExcluir = [];
       }
     }
-    // ***** FIM DA CORREÇÃO 1 *****
 
     const transaction = await sequelize.transaction();
 
     try {
       const estabelecimento = await Estabelecimento.findByPk(id, {
         transaction,
-        // ***** CORREÇÃO DO ALIAS AQUI *****
-        include: [{ model: ImagemProduto, as: "produtosImg" }], // <-- Este é o alias correto
+        include: [{ model: ImagemProduto, as: "produtosImg" }],
       });
 
       if (!estabelecimento) {
@@ -566,187 +583,89 @@ export class AdminController {
           .json({ message: "Estabelecimento não encontrado." });
       }
 
-      // ****** LÓGICA COMBINADA (para Dashboard e Ativos) ******
-      const statusOriginal = estabelecimento.status;
-      const dadosRecebidos = (estabelecimento.dados_atualizacao || {}) as any;
-      let emailInfo: { subject: string; html: string } | null = null;
+      const categoriaFinal =
+        adminEditedData.categoria || estabelecimento.categoria;
+      const nomeFinal =
+        adminEditedData.nomeFantasia || estabelecimento.nomeFantasia;
 
-      // 1. LÓGICA DE LOGO (UNIFICADA)
-      // ***** CORREÇÃO 2: Corrigir o bug do hasOwnProperty E checar por "DELETE" *****
-      if (
-        "logoUrl" in adminEditedData &&
-        (adminEditedData.logoUrl === "DELETE" ||
-          adminEditedData.logoUrl === null)
-      ) {
-        // ***** FIM DA CORREÇÃO 2 *****
-        const logoAntigaUrl = estabelecimento.logoUrl || dadosRecebidos.logo;
-        if (logoAntigaUrl) {
-          try {
-            const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
-            await fs.unlink(filePath);
-            console.log(`Logo deletada: ${logoAntigaUrl}`);
-          } catch (err) {
-            console.error(
-              `AVISO: Falha ao deletar logo: ${logoAntigaUrl}`,
-              err,
+      // 1. Uploads Admin
+      if (files && files.length > 0) {
+        for (const file of files) {
+          if (file.fieldname === "ccmei") {
+            if (estabelecimento.ccmeiUrl)
+              await fs
+                .unlink(path.resolve(estabelecimento.ccmeiUrl))
+                .catch(() => {});
+            const newCcmeiUrl = await moveAdminFile(
+              file,
+              categoriaFinal,
+              nomeFinal,
             );
+            adminEditedData.ccmeiUrl = newCcmeiUrl;
+          }
+          if (file.fieldname === "logo") {
+            if (estabelecimento.logoUrl)
+              await fs
+                .unlink(path.resolve(estabelecimento.logoUrl))
+                .catch(() => {});
+            const newLogoUrl = await moveAdminFile(
+              file,
+              categoriaFinal,
+              nomeFinal,
+            );
+            adminEditedData.logoUrl = newLogoUrl;
           }
         }
-        adminEditedData.logoUrl = null;
-      } else if (
-        (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO ||
-          statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) &&
-        dadosRecebidos.logo
-      ) {
-        // Admin está aprovando uma *nova* logo de uma pendência
-        const logoAntigaUrl = estabelecimento.logoUrl;
-        if (logoAntigaUrl) {
-          try {
-            const filePath = path.join(__dirname, "..", "..", logoAntigaUrl);
-            await fs.unlink(filePath);
-          } catch (err) {
-            console.error(
-              `AVISO: Falha ao deletar logo antiga: ${logoAntigaUrl}`,
-              err,
-            );
-          }
-        }
-        adminEditedData.logoUrl = dadosRecebidos.logo;
       }
 
-      // 2. LÓGICA DE IMAGENS DO PORTFÓLIO (UNIFICADA)
-      if (
-        (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO ||
-          statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) &&
-        dadosRecebidos.imagens &&
-        Array.isArray(dadosRecebidos.imagens) &&
-        dadosRecebidos.imagens.length > 0
-      ) {
-        // Cenário: APROVANDO uma atualização de portfólio
-        const imagensAntigas = await ImagemProduto.findAll({
-          where: { estabelecimentoId: estabelecimento.estabelecimentoId },
-          transaction,
-        });
+      // 2. Deletes Explícitos
+      if (adminEditedData.ccmeiUrl === "DELETE") {
+        if (estabelecimento.ccmeiUrl)
+          await fs
+            .unlink(path.resolve(estabelecimento.ccmeiUrl))
+            .catch(() => {});
+        adminEditedData.ccmeiUrl = null;
+      }
+      if (adminEditedData.logoUrl === "DELETE") {
+        if (estabelecimento.logoUrl)
+          await fs
+            .unlink(path.resolve(estabelecimento.logoUrl))
+            .catch(() => {});
+        adminEditedData.logoUrl = null;
+      }
 
-        for (const imagem of imagensAntigas) {
-          try {
-            const filePath = path.join(__dirname, "..", "..", imagem.url);
-            await fs.unlink(filePath);
-          } catch (err) {
-            /* ... log ... */
-          }
-        }
-
-        await ImagemProduto.destroy({
-          where: { estabelecimentoId: estabelecimento.estabelecimentoId },
-          transaction,
-        });
-
-        const imagensParaCriar = dadosRecebidos.imagens.filter(
-          (url: string) => !(urlsParaExcluir && urlsParaExcluir.includes(url)),
-        );
-
-        const novasImagens = imagensParaCriar.map((url: string) => ({
-          url,
-          estabelecimentoId: estabelecimento.estabelecimentoId,
-        }));
-        await ImagemProduto.bulkCreate(novasImagens, { transaction });
-      } else if (
-        urlsParaExcluir &&
-        Array.isArray(urlsParaExcluir) &&
-        urlsParaExcluir.length > 0
-      ) {
-        // Cenário: APENAS DELETANDO imagens (de um MEI ativo ou pendente)
-        const imagensParaDeletar = await ImagemProduto.findAll({
+      // 3. Exclusão de imagens do portfólio (apenas delete neste modo, upload de produto via admin não está implementado neste bloco específico de update direto mas poderia)
+      if (urlsParaExcluir && urlsParaExcluir.length > 0) {
+        const imgsDel = await ImagemProduto.findAll({
           where: {
             url: urlsParaExcluir,
             estabelecimentoId: estabelecimento.estabelecimentoId,
           },
           transaction,
         });
-
-        for (const imagem of imagensParaDeletar) {
-          try {
-            const filePath = path.join(__dirname, "..", "..", imagem.url);
-            await fs.unlink(filePath);
-            console.log(`Imagem de portfólio deletada: ${imagem.url}`);
-          } catch (err) {
-            console.error(
-              `AVISO: Falha ao deletar imagem de portfólio: ${imagem.url}`,
-              err,
-            );
-          }
-        }
-
+        for (const i of imgsDel)
+          await fs.unlink(path.resolve(i.url)).catch(() => {});
         await ImagemProduto.destroy({
-          where: { id: imagensParaDeletar.map((img) => img.id) },
+          where: { id: imgsDel.map((i) => i.id) },
           transaction,
         });
       }
 
-      const updatePayload: any = {
-        ...adminEditedData,
-      };
+      delete adminEditedData.urlsParaExcluir;
+      delete adminEditedData.estabelecimentoId;
 
-      if (
-        statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO ||
-        statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO
-      ) {
-        updatePayload.status = StatusEstabelecimento.ATIVO;
-        updatePayload.ativo = true;
-        updatePayload.dados_atualizacao = null;
-
-        if (statusOriginal === StatusEstabelecimento.PENDENTE_APROVACAO) {
-          emailInfo = {
-            subject: "Seu cadastro no MeideSaquá foi Aprovado!",
-            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>`,
-          };
-        } else {
-          emailInfo = {
-            subject:
-              "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
-            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
-          };
-        }
-      }
-
-      delete updatePayload.estabelecimentoId;
-      delete updatePayload.urlsParaExcluir;
-      // Precisamos checar com 'in' por causa do multer
-      if ("dados_atualizacao" in updatePayload) {
-        updatePayload.dados_atualizacao = null;
-      }
-
-      await estabelecimento.update(updatePayload, { transaction });
+      await estabelecimento.update(adminEditedData, { transaction });
       await transaction.commit();
-
-      if (emailInfo && estabelecimento.emailEstabelecimento) {
-        try {
-          await EmailService.sendGenericEmail({
-            to: estabelecimento.emailEstabelecimento,
-            subject: emailInfo.subject,
-            html: emailInfo.html,
-          });
-          console.log(
-            `Email de aprovação/atualização enviado para ${estabelecimento.emailEstabelecimento}`,
-          );
-        } catch (error) {
-          console.error(
-            `Falha ao enviar email de notificação para ${estabelecimento.emailEstabelecimento}:`,
-            error,
-          );
-        }
-      }
 
       return res
         .status(200)
         .json({ message: "Estabelecimento atualizado com sucesso." });
     } catch (error) {
       await transaction.rollback();
-      console.error("ERRO DURANTE A ATUALIZAÇÃO ADMIN (UNIFICADA):", error);
+      console.error("ERRO ADMIN_UPDATE:", error);
       return res
         .status(500)
-        .json({ message: "Erro ao atualizar o estabelecimento." });
+        .json({ message: "Erro ao atualizar estabelecimento." });
     }
   }
 
@@ -1287,11 +1206,9 @@ export class AdminController {
       await usuario.destroy({ transaction });
 
       await transaction.commit();
-      return res
-        .status(200)
-        .json({
-          message: "Usuário e todos os seus dados vinculados foram excluídos.",
-        });
+      return res.status(200).json({
+        message: "Usuário e todos os seus dados vinculados foram excluídos.",
+      });
     } catch (error) {
       await transaction.rollback();
       console.error("Erro ao excluir usuário (admin):", error);
