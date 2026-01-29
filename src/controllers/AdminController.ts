@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import Estabelecimento, {
   StatusEstabelecimento,
-} from "../entities/Estabelecimento.entity"; // Assumindo que Estabelecimento.entity.ts existe
+} from "../entities/Estabelecimento.entity";
 import * as jwt from "jsonwebtoken";
-import ImagemProduto from "../entities/ImagemProduto.entity"; // Verifique se o caminho está correto
+import ImagemProduto from "../entities/ImagemProduto.entity";
 import sequelize from "../config/database";
 import fs from "fs/promises";
 import path from "path";
@@ -47,35 +47,27 @@ const moveAdminFile = async (
   const safeCategoria = sanitize(categoria || "geral");
   const safeNomeFantasia = sanitize(nomeFantasia || "mei_sem_nome");
 
-  // Define o diretório de destino: uploads/categoria/nome_fantasia
   const targetDir = path.resolve("uploads", safeCategoria, safeNomeFantasia);
 
-  // Garante que o diretório existe
   await fs.mkdir(targetDir, { recursive: true });
 
-  // --- LÓGICA DE NOMEAÇÃO ALTERADA AQUI ---
   let fileName = `${Date.now()}-${file.originalname.replace(/\s/g, "_")}`;
 
-  // Se o arquivo for o CCMEI, forçamos o nome para "CCMEI" mantendo a extensão
   if (file.fieldname === "ccmei") {
-    const ext = path.extname(file.originalname); // ex: .pdf, .jpg
+    const ext = path.extname(file.originalname);
     fileName = `CCMEI${ext}`;
   }
 
   const newPath = path.join(targetDir, fileName);
 
-  // Lógica Híbrida: Suporta MemoryStorage (buffer) e DiskStorage (path)
   if (file.path) {
-    // Se o arquivo já existe temporariamente no disco (DiskStorage)
     try {
       await fs.rename(file.path, newPath);
     } catch (error) {
-      // Fallback: copia e deleta se estiver em partições diferentes
       await fs.copyFile(file.path, newPath);
       await fs.unlink(file.path);
     }
   } else if (file.buffer) {
-    // Se o arquivo está na memória (MemoryStorage - padrão do multer())
     await fs.writeFile(newPath, file.buffer);
   } else {
     throw new Error(
@@ -83,7 +75,6 @@ const moveAdminFile = async (
     );
   }
 
-  // Retorna o caminho relativo (estilo URL) para salvar no banco
   return path
     .join("uploads", safeCategoria, safeNomeFantasia, fileName)
     .replace(/\\/g, "/");
@@ -113,8 +104,7 @@ export class AdminController {
     try {
       const includeOptions = {
         model: ImagemProduto,
-        // ***** CORREÇÃO DO ALIAS AQUI *****
-        as: "produtosImg", // <-- Este é o alias correto
+        as: "produtosImg",
         attributes: ["url"],
       };
 
@@ -149,7 +139,6 @@ export class AdminController {
 
       const estabelecimento = await Estabelecimento.findByPk(id, {
         transaction,
-        // ***** ALIAS CORRETO *****
         include: [{ model: ImagemProduto, as: "produtosImg" }],
       });
       if (!estabelecimento) {
@@ -187,8 +176,6 @@ export class AdminController {
               [key: string]: any;
             } = {};
 
-            // ***** CORREÇÃO 1: LISTA DE CAMPOS PERMITIDOS COMPLETA *****
-            // (Agora inclui telefone, email, e todos os outros campos)
             const camposPermitidos: (keyof Estabelecimento | string)[] = [
               "nomeFantasia",
               "cnpj",
@@ -197,7 +184,7 @@ export class AdminController {
               "cpfResponsavel",
               "cnae",
               "emailEstabelecimento",
-              "contatoEstabelecimento", // <-- TELEFONE
+              "contatoEstabelecimento",
               "endereco",
               "descricao",
               "descricaoDiferencial",
@@ -212,7 +199,6 @@ export class AdminController {
               "publicoAlvo",
               "impacto",
             ];
-            // ***** FIM DA CORREÇÃO 1 *****
 
             for (const key of camposPermitidos) {
               if (
@@ -223,7 +209,6 @@ export class AdminController {
               }
             }
 
-            // Lógica para LOGO (Esta já estava correta)
             if (dadosRecebidos.logo) {
               const logoAntigaUrl = estabelecimento.logoUrl;
               if (logoAntigaUrl) {
@@ -245,15 +230,11 @@ export class AdminController {
               dadosParaAtualizar.logoUrl = dadosRecebidos.logo;
             }
 
-            // ***** CORREÇÃO 2: LÓGICA DE IMAGENS *****
-            // (Trocado 'imagens' por 'produtos', que é o nome correto do campo)
             if (
               dadosRecebidos.produtos &&
               Array.isArray(dadosRecebidos.produtos) &&
               dadosRecebidos.produtos.length > 0
             ) {
-              // ***** FIM DA CORREÇÃO 2 *****
-
               const imagensAntigas = await ImagemProduto.findAll({
                 where: { estabelecimentoId: estabelecimento.estabelecimentoId },
                 transaction,
@@ -276,9 +257,7 @@ export class AdminController {
                 transaction,
               });
 
-              // ***** CORREÇÃO 2 (continuação) *****
               const novasImagens = dadosRecebidos.produtos.map(
-                // ***** FIM DA CORREÇÃO 2 *****
                 (url: string) => ({
                   url,
                   estabelecimentoId: estabelecimento.estabelecimentoId,
@@ -306,7 +285,6 @@ export class AdminController {
           break;
 
         case StatusEstabelecimento.PENDENTE_EXCLUSAO:
-          // TODO: Adicionar lógica para deletar arquivos (logo, imagens) ANTES do destroy
           emailInfo = {
             subject:
               "Seu estabelecimento foi removido da plataforma MeideSaquá",
@@ -362,7 +340,7 @@ export class AdminController {
   static async editAndApproveRequest(req: Request, res: Response) {
     const { id } = req.params;
     const adminEditedData = req.body;
-    const files = req.files as Express.Multer.File[]; // Recebe arquivos do Multer
+    const files = req.files as Express.Multer.File[];
 
     let { urlsParaExcluir } = adminEditedData;
     if (urlsParaExcluir && typeof urlsParaExcluir === "string") {
@@ -391,8 +369,6 @@ export class AdminController {
       const statusOriginal = estabelecimento.status;
       const dadosRecebidos = (estabelecimento.dados_atualizacao || {}) as any;
 
-      // 1. Processar UPLOADS do Admin (Logo ou CCMEI novos)
-      // Como estamos editando, usamos a categoria/nome ATUAL do estabelecimento ou do update
       const categoriaFinal =
         adminEditedData.categoria || estabelecimento.categoria;
       const nomeFinal =
@@ -401,7 +377,6 @@ export class AdminController {
       if (files && files.length > 0) {
         for (const file of files) {
           if (file.fieldname === "ccmei") {
-            // Deletar antigo se existir
             if (estabelecimento.ccmeiUrl) {
               await fs
                 .unlink(path.resolve(estabelecimento.ccmeiUrl))
@@ -430,7 +405,6 @@ export class AdminController {
         }
       }
 
-      // 2. Processar DELETE de CCMEI e LOGO via string
       if (adminEditedData.ccmeiUrl === "DELETE") {
         if (estabelecimento.ccmeiUrl) {
           await fs
@@ -448,15 +422,12 @@ export class AdminController {
         adminEditedData.logoUrl = null;
       }
 
-      // 3. Mesclar com dados_atualizacao se existirem (para o que o admin NÃO alterou)
       if (statusOriginal === StatusEstabelecimento.PENDENTE_ATUALIZACAO) {
-        // Se o admin não enviou um novo CCMEI nem mandou deletar, e o usuário pediu alteração de CCMEI:
         if (
           !adminEditedData.ccmeiUrl &&
           adminEditedData.ccmeiUrl !== null &&
           dadosRecebidos.ccmei
         ) {
-          // Deletar o do banco antigo
           if (estabelecimento.ccmeiUrl)
             await fs
               .unlink(path.resolve(estabelecimento.ccmeiUrl))
@@ -464,7 +435,6 @@ export class AdminController {
           adminEditedData.ccmeiUrl = dadosRecebidos.ccmei;
         }
 
-        // Se admin não mexeu na logo, mas user pediu troca:
         if (
           !adminEditedData.logoUrl &&
           adminEditedData.logoUrl !== null &&
@@ -476,10 +446,7 @@ export class AdminController {
               .catch(() => {});
           adminEditedData.logoUrl = dadosRecebidos.logo;
         }
-
-        // Tratamento de Imagens do Produto (Mantido lógica anterior)
         if (dadosRecebidos.produtos && Array.isArray(dadosRecebidos.produtos)) {
-          // Limpa antigas
           const imgsAntigas = await ImagemProduto.findAll({
             where: { estabelecimentoId: estabelecimento.estabelecimentoId },
             transaction,
@@ -491,7 +458,6 @@ export class AdminController {
             transaction,
           });
 
-          // Filtra excluídas pelo admin e cria novas
           const imgsParaCriar = dadosRecebidos.produtos.filter(
             (u: string) => !urlsParaExcluir.includes(u),
           );
@@ -505,7 +471,6 @@ export class AdminController {
 
       delete adminEditedData.urlsParaExcluir;
 
-      // Atualiza o registro principal
       await estabelecimento.update(
         {
           ...adminEditedData,
@@ -518,7 +483,6 @@ export class AdminController {
 
       await transaction.commit();
 
-      // Envia email (mantido simplificado)
       if (estabelecimento.emailEstabelecimento) {
         EmailService.sendGenericEmail({
           to: estabelecimento.emailEstabelecimento,
@@ -551,8 +515,6 @@ export class AdminController {
         .json({ message: "Erro ao buscar estabelecimentos ativos." });
     }
   }
-
-  // ***** FUNÇÃO UNIFICADA (CHAMADA PELO DASHBOARD E PÁGINA DE ATIVOS) *****
 
   static async adminUpdateEstabelecimento(req: Request, res: Response) {
     const { id } = req.params;
@@ -618,7 +580,6 @@ export class AdminController {
         }
       }
 
-      // 2. Deletes Explícitos
       if (adminEditedData.ccmeiUrl === "DELETE") {
         if (estabelecimento.ccmeiUrl)
           await fs
@@ -634,7 +595,6 @@ export class AdminController {
         adminEditedData.logoUrl = null;
       }
 
-      // 3. Exclusão de imagens do portfólio (apenas delete neste modo, upload de produto via admin não está implementado neste bloco específico de update direto mas poderia)
       if (urlsParaExcluir && urlsParaExcluir.length > 0) {
         const imgsDel = await ImagemProduto.findAll({
           where: {
@@ -681,18 +641,14 @@ export class AdminController {
           .json({ message: "ID do estabelecimento inválido." });
       }
 
-      const estabelecimento = await Estabelecimento.findByPk(id);
-      if (!estabelecimento) {
-        return res
-          .status(404)
-          .json({ message: "Estabelecimento não encontrado." });
-      }
-
-      // TODO: Adicionar lógica para deletar arquivos (logo, imagens) ANTES do destroy
-      await estabelecimento.destroy();
+      await EstabelecimentoService.deletarDefinitivamente(id);
 
       return res.status(204).send();
     } catch (error: any) {
+      if (error.message === "Estabelecimento não encontrado para exclusão.") {
+        return res.status(404).json({ message: error.message });
+      }
+
       console.error("Falha ao excluir estabelecimento (admin):", error);
       return res
         .status(500)
@@ -723,7 +679,6 @@ export class AdminController {
         : "<p>Para mais detalhes, entre em contato conosco.</p>";
 
       if (estabelecimento.status === StatusEstabelecimento.PENDENTE_APROVACAO) {
-        // TODO: Adicionar lógica para deletar arquivos (logo, imagens)
         await estabelecimento.destroy({ transaction });
         responseMessage = "Cadastro de estabelecimento rejeitado e removido.";
 
@@ -740,7 +695,6 @@ export class AdminController {
         estabelecimento.dados_atualizacao = null;
         await estabelecimento.save({ transaction });
 
-        // TODO: Adicionar lógica para deletar arquivos pendentes de atualização
         if (statusAnterior === StatusEstabelecimento.PENDENTE_ATUALIZACAO) {
           emailInfo = {
             subject:
@@ -798,7 +752,7 @@ export class AdminController {
       const estabelecimento = await Estabelecimento.findByPk(
         estabelecimentoId,
         {
-          attributes: ["estabelecimentoId", "nomeFantasia", "categoria"], // Corrigido de nomeEstabelecimento
+          attributes: ["estabelecimentoId", "nomeFantasia", "categoria"],
         },
       );
 
@@ -900,11 +854,9 @@ export class AdminController {
 
       const SEPARATOR = ";";
 
-      // Função auxiliar para escapar campos CSV
       const escapeCsvField = (field: any) => {
         if (field === null || field === undefined) return '""';
         const stringField = String(field);
-        // Trata aspas, vírgulas e quebras de linha
         if (
           stringField.includes('"') ||
           stringField.includes(SEPARATOR) ||
@@ -915,7 +867,6 @@ export class AdminController {
         return `"${stringField}"`;
       };
 
-      // Monta o conteúdo do CSV
       let csvContent = headers.join(SEPARATOR) + "\n";
 
       estabelecimentos.forEach((est) => {
@@ -944,7 +895,6 @@ export class AdminController {
         csvContent += row.map(escapeCsvField).join(SEPARATOR) + "\n";
       });
 
-      // Configura os headers da resposta para download
       res.header("Content-Type", "text/csv; charset=utf-8");
       res.attachment("estabelecimentos_ativos_meidesaqua.csv");
       return res.status(200).send(csvContent);
@@ -958,7 +908,6 @@ export class AdminController {
 
   static async getDashboardStats(req: Request, res: Response) {
     try {
-      // 1. Buscando dados básicos (mantido)
       const estabelecimentos = await Estabelecimento.findAll({
         where: { status: StatusEstabelecimento.ATIVO },
         attributes: ["estabelecimentoId", "categoria", "escala", "venda"],
@@ -993,7 +942,6 @@ export class AdminController {
         qtd: qtd,
       }));
 
-      // 2. Processamento dos Gráficos de Categoria, Escala e Vendas (mantido)
       const categoriasMap: { [key: string]: number } = {};
       const escalaMap: { [key: string]: number } = {};
       const vendasMap: { [key: string]: number } = {};

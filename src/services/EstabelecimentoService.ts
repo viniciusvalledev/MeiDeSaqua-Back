@@ -6,16 +6,12 @@ import Estabelecimento, {
 import ImagemProduto from "../entities/ImagemProduto.entity";
 import Avaliacao from "../entities/Avaliacao.entity";
 import CnpjService from "./CnpjService";
-import Usuario from "../entities/Usuario.entity"; // ADICIONADO: Necessário para a busca aninhada
+import Usuario from "../entities/Usuario.entity";
+import FileStorageService from "../utils/FileStorageService";
 
 class EstabelecimentoService {
-
-  // --- MÉTODOS EXISTENTES (INTACTOS) ---
-  // A lógica de cadastro com validação de CNPJ é crucial
-  // e foi mantida exatamente como estava no seu original do MeiDeSaquá.
-
   public async cadastrarEstabelecimentoComImagens(
-    dados: any
+    dados: any,
   ): Promise<Estabelecimento> {
     if (!dados.cnpj) {
       throw new Error("O campo CNPJ é obrigatório.");
@@ -25,7 +21,7 @@ class EstabelecimentoService {
       const dadosCnpj = await CnpjService.consultarCnpj(dados.cnpj);
       if (dadosCnpj.opcao_pelo_mei !== true) {
         throw new Error(
-          `O CNPJ não corresponde a um MEI. O porte identificado foi: "${dadosCnpj.porte}".`
+          `O CNPJ não corresponde a um MEI. O porte identificado foi: "${dadosCnpj.porte}".`,
         );
       }
       const situacao = String(dadosCnpj.situacao_cadastral);
@@ -44,7 +40,7 @@ class EstabelecimentoService {
         const statusLegivel = mapaStatus[situacao] || situacao;
 
         throw new Error(
-          `O CNPJ está com a situação "${statusLegivel}". Apenas CNPJs com situação "ATIVA" são permitidos. Em caso de dúvidas, entre em contato com a Sala do Empreendedor.`
+          `O CNPJ está com a situação "${statusLegivel}". Apenas CNPJs com situação "ATIVA" são permitidos. Em caso de dúvidas, entre em contato com a Sala do Empreendedor.`,
         );
       }
 
@@ -53,7 +49,7 @@ class EstabelecimentoService {
         throw new Error(
           `Este CNPJ pertence à cidade de ${
             dadosCnpj.municipio || "desconhecida"
-          }. Apenas CNPJs de Saquarema são permitidos. Em caso de dúvidas, entre em contato com a Sala do Empreendedor.`
+          }. Apenas CNPJs de Saquarema são permitidos. Em caso de dúvidas, entre em contato com a Sala do Empreendedor.`,
         );
       }
     } catch (error: any) {
@@ -122,7 +118,7 @@ class EstabelecimentoService {
 
   public async solicitarAtualizacaoPorCnpj(
     cnpj: string,
-    dadosAtualizacao: any
+    dadosAtualizacao: any,
   ): Promise<Estabelecimento> {
     const estabelecimento = await Estabelecimento.findOne({ where: { cnpj } });
 
@@ -138,7 +134,7 @@ class EstabelecimentoService {
   }
 
   public async solicitarExclusaoPorCnpj(
-    dadosExclusao: any // Recebe o objeto completo do controller
+    dadosExclusao: any, // Recebe o objeto completo do controller
   ): Promise<void> {
     const { cnpj } = dadosExclusao; // Extrai o CNPJ dos dados
 
@@ -187,9 +183,6 @@ class EstabelecimentoService {
     });
   }
 
-  // --- MÉTODO 'buscarPorId' TOTALMENTE REFATORADO ---
-  // Incorpora a lógica de 'buscarPorNomeUnico' do ProjetoService,
-  // buscando avaliações aninhadas e calculando a média.
   public async buscarPorId(id: number): Promise<Estabelecimento | null> {
     try {
       const estabelecimento = await Estabelecimento.findOne({
@@ -244,7 +237,7 @@ class EstabelecimentoService {
 
       // 3. Montar o JSON de resposta (similar ao ODS Service)
       const estabelecimentoJSON = estabelecimento.toJSON();
-      
+
       // Anexa as imagens e avaliações
       (estabelecimentoJSON as any).produtosImg = imagens;
       (estabelecimentoJSON as any).avaliacoes = avaliacoes;
@@ -253,34 +246,34 @@ class EstabelecimentoService {
       if (avaliacoes && avaliacoes.length > 0) {
         // Filtra para garantir que só notas de comentários principais sejam contadas
         const notasPrincipais = avaliacoes
-          .map(a => a.nota)
-          .filter(n => n !== null) as number[];
-          
+          .map((a) => a.nota)
+          .filter((n) => n !== null) as number[];
+
         if (notasPrincipais.length > 0) {
-           const somaDasNotas = notasPrincipais.reduce((acc, nota) => acc + nota, 0);
-           (estabelecimentoJSON as any).media = parseFloat(
-            (somaDasNotas / notasPrincipais.length).toFixed(1)
-           );
+          const somaDasNotas = notasPrincipais.reduce(
+            (acc, nota) => acc + nota,
+            0,
+          );
+          (estabelecimentoJSON as any).media = parseFloat(
+            (somaDasNotas / notasPrincipais.length).toFixed(1),
+          );
         } else {
-           (estabelecimentoJSON as any).media = 0; // Caso só haja respostas sem nota (improvável)
+          (estabelecimentoJSON as any).media = 0; // Caso só haja respostas sem nota (improvável)
         }
       } else {
         (estabelecimentoJSON as any).media = 0;
       }
-      
-      return estabelecimentoJSON as Estabelecimento;
 
+      return estabelecimentoJSON as Estabelecimento;
     } catch (error) {
       console.error("[EstabelecimentoService] Erro ao buscarPorId:", error);
       throw error;
     }
   }
 
-  // --- MÉTODOS RESTANTES (INTACTOS) ---
-  
   public async alterarStatusAtivo(
     id: number,
-    ativo: boolean
+    ativo: boolean,
   ): Promise<Estabelecimento> {
     const estabelecimento = await Estabelecimento.findByPk(id);
     if (!estabelecimento) {
@@ -310,7 +303,7 @@ class EstabelecimentoService {
       include: [
         {
           model: ImagemProduto,
-          as: "produtosImg", // ESSA ASSOCIAÇÃO É CRUCIAL
+          as: "produtosImg",
           attributes: ["url"],
         },
       ],
@@ -332,6 +325,21 @@ class EstabelecimentoService {
     });
 
     return { cadastros, atualizacoes, exclusoes };
+  }
+
+  public async deletarDefinitivamente(id: number): Promise<void> {
+    const estabelecimento = await Estabelecimento.findByPk(id);
+
+    if (!estabelecimento) {
+      throw new Error("Estabelecimento não encontrado para exclusão.");
+    }
+
+    await FileStorageService.deleteFolder(
+      estabelecimento.categoria,
+      estabelecimento.nomeFantasia,
+    );
+
+    await estabelecimento.destroy();
   }
 }
 

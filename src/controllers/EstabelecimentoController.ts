@@ -6,6 +6,7 @@ import fs from "fs/promises";
 import path from "path";
 import Estabelecimento from "../entities/Estabelecimento.entity";
 import ContadorVisualizacao from "../entities/ContadorVisualizacao.entity";
+import { sanitizeFilename } from "../utils/stringUtils";
 
 class EstabelecimentoController {
   private _deleteUploadedFilesOnFailure = async (req: Request) => {
@@ -18,10 +19,10 @@ class EstabelecimentoController {
           .unlink(file.path)
           .catch((err) =>
             console.error(
-              `Falha ao deletar arquivo ${file.path} durante rollback: ${err.message}`
-            )
-          )
-      )
+              `Falha ao deletar arquivo ${file.path} durante rollback: ${err.message}`,
+            ),
+          ),
+      ),
     );
   };
 
@@ -67,7 +68,7 @@ class EstabelecimentoController {
 
   private _moveFilesAndPrepareData = async (
     req: Request,
-    existingInfo?: { categoria: string; nomeFantasia: string }
+    existingInfo?: { categoria: string; nomeFantasia: string },
   ): Promise<any> => {
     const dadosDoFormulario = req.body;
     const arquivos = req.files as {
@@ -80,14 +81,14 @@ class EstabelecimentoController {
 
     const sanitize = (name: string) =>
       (name || "").replace(/[^a-z0-9]/gi, "_").toLowerCase();
-    const safeCategoria = sanitize(categoria || "geral");
-    const safeNomeFantasia = sanitize(nomeFantasia || "mei_sem_nome");
+    const safeCategoria = sanitizeFilename(categoria || "geral");
+    const safeNomeFantasia = sanitizeFilename(nomeFantasia || "mei_sem_nome");
 
     const targetDir = path.resolve("uploads", safeCategoria, safeNomeFantasia);
     await fs.mkdir(targetDir, { recursive: true });
 
     const moveFile = async (
-      file?: Express.Multer.File
+      file?: Express.Multer.File,
     ): Promise<string | undefined> => {
       if (!file) return undefined;
       const oldPath = file.path;
@@ -122,7 +123,7 @@ class EstabelecimentoController {
       const dadosCompletos = await this._moveFilesAndPrepareData(req);
       const novoEstabelecimento =
         await EstabelecimentoService.cadastrarEstabelecimentoComImagens(
-          dadosCompletos
+          dadosCompletos,
         );
       return res.status(201).json(novoEstabelecimento);
     } catch (error: any) {
@@ -133,7 +134,7 @@ class EstabelecimentoController {
 
   public solicitarAtualizacao = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const { cnpj } = req.body;
@@ -162,7 +163,7 @@ class EstabelecimentoController {
       const estabelecimento =
         await EstabelecimentoService.solicitarAtualizacaoPorCnpj(
           cnpj,
-          dadosCompletos
+          dadosCompletos,
         );
 
       return res.status(200).json({
@@ -177,7 +178,7 @@ class EstabelecimentoController {
 
   public solicitarExclusao = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const { cnpj, nome_responsavel, cpf_responsavel, emailEstabelecimento } =
@@ -224,7 +225,7 @@ class EstabelecimentoController {
 
   public listarTodos = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const estabelecimentos = await EstabelecimentoService.listarTodos();
@@ -236,7 +237,7 @@ class EstabelecimentoController {
 
   public buscarPorNome = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const nome = req.query.nome as string;
@@ -249,7 +250,7 @@ class EstabelecimentoController {
 
   public buscarPorId = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const id = parseInt(req.params.id);
@@ -268,7 +269,7 @@ class EstabelecimentoController {
   };
   public alterarStatus = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const id = parseInt(req.params.id);
@@ -281,7 +282,7 @@ class EstabelecimentoController {
       }
       const estabelecimento = await EstabelecimentoService.alterarStatusAtivo(
         id,
-        ativo
+        ativo,
       );
       return res.status(200).json(estabelecimento);
     } catch (error: any) {
@@ -291,7 +292,7 @@ class EstabelecimentoController {
 
   public registrarVisualizacao = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> => {
     try {
       const { identificador } = req.params;
