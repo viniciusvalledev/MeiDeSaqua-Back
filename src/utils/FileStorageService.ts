@@ -2,14 +2,12 @@
 import fs from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
+import { sanitizeFilename } from "./stringUtils";
 
 // O caminho para a pasta de uploads, a partir da raiz do projeto
 const UPLOADS_DIR = path.resolve(__dirname, "..", "..", "uploads");
 
 class FileStorageService {
-  /**
-   * Garante que a pasta de uploads exista.
-   */
   private async ensureUploadsDirExists(): Promise<void> {
     try {
       await fs.access(UPLOADS_DIR);
@@ -19,11 +17,6 @@ class FileStorageService {
     }
   }
 
-  /**
-   * Salva uma imagem em Base64.
-   * @param base64String A string da imagem em Base64.
-   * @returns A URL pública completa do ficheiro salvo.
-   */
   public async saveBase64(base64String: string): Promise<string | null> {
     if (!base64String || base64String.trim() === "") {
       return null;
@@ -32,7 +25,7 @@ class FileStorageService {
     await this.ensureUploadsDirExists();
 
     const matches = base64String.match(
-      /^data:(image\/([a-zA-Z]+));base64,(.+)$/
+      /^data:(image\/([a-zA-Z]+));base64,(.+)$/,
     );
     if (!matches || matches.length !== 4) {
       throw new Error("Formato de string Base64 inválido.");
@@ -50,11 +43,6 @@ class FileStorageService {
     return `${process.env.APP_URL}/uploads/${uniqueFilename}`;
   }
 
-  /**
-   * Salva um ficheiro enviado via formulário (multipart/form-data).
-   * @param file O objeto do ficheiro (geralmente do Multer).
-   * @returns O URL público completo do ficheiro salvo.
-   */
   public async save(file: Express.Multer.File): Promise<string> {
     await this.ensureUploadsDirExists();
 
@@ -65,6 +53,26 @@ class FileStorageService {
     // Retorna a URL completa usando a variável de ambiente e o caminho /uploads/
     const fileUrl = `${process.env.APP_URL}/uploads/${file.filename}`;
     return fileUrl;
+  }
+
+  public async deleteFolder(
+    categoria: string,
+    nomeFantasia: string,
+  ): Promise<void> {
+    const safeCategoria = sanitizeFilename(categoria || "geral");
+    const safeNomeFantasia = sanitizeFilename(nomeFantasia || "mei_sem_nome");
+
+    const folderPath = path.join(UPLOADS_DIR, safeCategoria, safeNomeFantasia);
+
+    try {
+      await fs.rm(folderPath, { recursive: true, force: true });
+      console.log(`[FileStorageService] Pasta removida: ${folderPath}`);
+    } catch (error: any) {
+      console.error(
+        `[FileStorageService] Erro ao remover pasta ${folderPath}:`,
+        error.message,
+      );
+    }
   }
 }
 
