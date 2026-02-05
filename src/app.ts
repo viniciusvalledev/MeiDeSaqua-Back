@@ -14,6 +14,7 @@ import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import avaliacaoRoutes from "./routes/avaliacao.routes";
 import estabelecimentoRoutes from "./routes/estabelecimento.routes";
+import cursoRoutes from "./routes/curso.routes";
 import fileRoutes from "./routes/file.routes";
 import adminRoutes from "./routes/admin.routes";
 import { authMiddleware } from "./middlewares/auth.middleware";
@@ -46,6 +47,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/estabelecimentos", estabelecimentoRoutes);
 app.use("/api/avaliacoes", avaliacaoRoutes);
 app.use("/api/files", fileRoutes);
+app.use("/api/cursos", cursoRoutes);
 
 app.use("/api/admin", adminRoutes);
 

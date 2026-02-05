@@ -4,25 +4,22 @@ import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { sanitizeFilename } from "./stringUtils";
 
-// O caminho para a pasta de uploads, a partir da raiz do projeto
 const UPLOADS_DIR = path.resolve(__dirname, "..", "..", "uploads");
 
 class FileStorageService {
-  private async ensureUploadsDirExists(): Promise<void> {
+  private async ensureDirExists(dirPath: string): Promise<void> {
     try {
-      await fs.access(UPLOADS_DIR);
+      await fs.access(dirPath);
     } catch (error) {
-      // Se a pasta não existe, cria-a
-      await fs.mkdir(UPLOADS_DIR, { recursive: true });
+      await fs.mkdir(dirPath, { recursive: true });
     }
   }
-
   public async saveBase64(base64String: string): Promise<string | null> {
     if (!base64String || base64String.trim() === "") {
       return null;
     }
 
-    await this.ensureUploadsDirExists();
+    await this.ensureDirExists(UPLOADS_DIR);
 
     const matches = base64String.match(
       /^data:(image\/([a-zA-Z]+));base64,(.+)$/,
@@ -44,15 +41,60 @@ class FileStorageService {
   }
 
   public async save(file: Express.Multer.File): Promise<string> {
-    await this.ensureUploadsDirExists();
+    await this.ensureDirExists(UPLOADS_DIR);
+    return `/uploads/${file.filename}`;
+  }
 
-    // O Multer já deve ter salvo o arquivo na pasta 'uploads' com um 'filename' único
-    // (Verifique sua configuração do Multer se 'file.filename' não for o nome final)
+  public async saveCurso(file: Express.Multer.File): Promise<string> {
+    const cursosDir = path.join(UPLOADS_DIR, "cursos");
+    await this.ensureDirExists(cursosDir);
 
-    // --- CORREÇÃO AQUI ---
-    // Retorna a URL completa usando a variável de ambiente e o caminho /uploads/
-    const fileUrl = `${process.env.APP_URL}/uploads/${file.filename}`;
-    return fileUrl;
+    const oldPath = file.path;
+    const newPath = path.join(cursosDir, file.filename);
+
+    try {
+      await fs.rename(oldPath, newPath);
+      return `/uploads/cursos/${file.filename}`;
+    } catch (error) {
+      console.error("Erro ao mover arquivo de curso:", error);
+      throw new Error("Falha ao salvar imagem do curso.");
+    }
+  }
+
+  public async deleteFile(fileUrl: string): Promise<void> {
+    if (!fileUrl) return;
+
+    try {
+      const relativePath = fileUrl.startsWith("/")
+        ? fileUrl.substring(1)
+        : fileUrl;
+
+      let finalPath = relativePath;
+      if (fileUrl.includes("/uploads/")) {
+        const parts = fileUrl.split("/uploads/");
+        if (parts.length >= 2) {
+          // parts[1] será "cursos/foto.png"
+          finalPath = path.join("uploads", parts[1]);
+        }
+      }
+      let pathInsideUploads = "";
+      if (fileUrl.includes("/uploads/")) {
+        pathInsideUploads = fileUrl.split("/uploads/")[1];
+      } else {
+        return;
+      }
+
+      const filePath = path.join(UPLOADS_DIR, pathInsideUploads);
+
+      await fs.unlink(filePath);
+      console.log(`[FileStorageService] Arquivo deletado: ${filePath}`);
+    } catch (error: any) {
+      if (error.code !== "ENOENT") {
+        console.error(
+          `[FileStorageService] Erro ao deletar arquivo: ${error.message}`,
+        );
+      }
+    }
   }
 
   public async deleteFolder(
