@@ -992,7 +992,12 @@ export class AdminController {
       const totalUsuarios = await Usuario.count();
       const visualizacoesRaw = await ContadorVisualizacao.findAll();
 
-      const pageViews = { home: 0, espacoMei: 0, categoriasTotal: 0 };
+      const pageViews = {
+        home: 0,
+        espacoMei: 0,
+        categoriasTotal: 0,
+        redirecionamento: 0,
+      };
       const mapaVisualizacoes: { [key: string]: number } = {};
       const mapaCursos: { [key: string]: number } = {};
 
@@ -1005,6 +1010,8 @@ export class AdminController {
           pageViews.home = v.visualizacoes;
         } else if (v.identificador === "ESPACO_MEI") {
           pageViews.espacoMei = v.visualizacoes;
+        } else if (v.identificador === "REDIRECIONAMENTO") {
+          pageViews.redirecionamento = v.visualizacoes;
         } else if (v.identificador.startsWith("CAT_")) {
           let nomeCat = v.identificador
             .replace("CAT_", "")

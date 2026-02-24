@@ -308,6 +308,8 @@ class EstabelecimentoController {
       if (
         chaveFormatada !== "HOME" &&
         chaveFormatada !== "ESPACO_MEI" &&
+        chaveFormatada !== "REDIRECIONAMENTO" &&
+        chaveFormatada !== "PROFILE_SHARE" &&
         !chaveFormatada.startsWith("CAT_") &&
         !chaveFormatada.startsWith("CURSO_")
       ) {
