@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import fs from "fs";
+import path from "path";
 
 interface EmailOptions {
   to: string;
@@ -9,7 +11,7 @@ interface EmailOptions {
 class EmailService {
   private transporter;
 
-  constructor() {
+ constructor() {
     this.transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
       port: Number(process.env.MAIL_PORT),
@@ -24,51 +26,155 @@ class EmailService {
     });
   }
 
+  private getHtmlTemplate(
+    templateName: string,
+    replacements: Record<string, string>,
+  ): string {
+    const filePath = path.join(
+      __dirname,
+      `../templates/emails/${templateName}.html`,
+    );
+    let htmlContent = fs.readFileSync(filePath, "utf-8");
+
+    for (const [key, value] of Object.entries(replacements)) {
+      htmlContent = htmlContent.split(`[${key}]`).join(value);
+    }
+    return htmlContent;
+  }
+
   public async sendConfirmationEmail(to: string, token: string): Promise<void> {
     const confirmationUrl = `https://meidesaqua.saquarema.rj.gov.br/confirmar-conta?token=${token}`;
-    const message = {
-      from: `"Meidesaqua" <${process.env.MAIL_USER}>`,
-      to: to,
-      subject: "Confirmação de Cadastro - Meidesaqua",
-      html: `Obrigado por se cadastrar! Por favor, clique no link abaixo para ativar sua conta:<br><br>
-                   <a href="${confirmationUrl}">${confirmationUrl}</a><br><br>
-                   Se você não se cadastrou em nosso site, por favor ignore este e-mail.`,
-    };
-    await this.transporter.sendMail(message);
+    const htmlContent = this.getHtmlTemplate("confirmacao", {
+      LINK_CONFIRMACAO: confirmationUrl,
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Confirmação de Cadastro - MeideSaquá",
+      html: htmlContent,
+    });
   }
 
   public async sendPasswordResetEmail(
     to: string,
-    token: string
+    token: string,
   ): Promise<void> {
     const resetUrl = `https://meidesaqua.saquarema.rj.gov.br/redefinir-senha?token=${token}`;
-    const message = {
-      from: `"Meidesaqua" <${process.env.MAIL_USER}>`,
-      to: to,
-      subject: "Redefinição de Senha - Meidesaqua",
-      html: `Recebemos um pedido para redefinir a senha da sua conta.<br><br>
-                   Por favor, clique no link abaixo para criar uma nova senha:<br>
-                   <a href="${resetUrl}">${resetUrl}</a><br><br>
-                   Se você não solicitou esta alteração, por favor ignore este e-mail.`,
-    };
-    await this.transporter.sendMail(message);
+    const htmlContent = this.getHtmlTemplate("redefinir-senha", {
+      LINK_REDEFINIR: resetUrl,
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Redefinição de Senha - MeideSaquá",
+      html: htmlContent,
+    });
   }
 
   public async sendEmailChangeConfirmationEmail(
     to: string,
-    token: string
+    token: string,
   ): Promise<void> {
     const confirmationUrl = `https://meidesaqua.saquarema.rj.gov.br/confirmar-novo-email?token=${token}`;
-    const message = {
-      from: `"Meidesaqua" <${process.env.MAIL_USER}>`,
-      to: to,
-      subject: "Confirmação de Alteração de E-mail - Meidesaqua",
-      html: `Recebemos um pedido para alterar o e-mail da sua conta para este endereço.<br><br>
-                   Por favor, clique no link abaixo para confirmar a alteração:<br>
-                   <a href="${confirmationUrl}">${confirmationUrl}</a><br><br>
-                   Se você não solicitou esta alteração, por favor ignore este e-mail.`,
-    };
-    await this.transporter.sendMail(message);
+    const htmlContent = this.getHtmlTemplate("alterar-email", {
+      LINK_ALTERAR_EMAIL: confirmationUrl,
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Confirmação de Alteração de E-mail - MeideSaquá",
+      html: htmlContent,
+    });
+  }
+
+  // --- NOVAS FUNÇÕES PARA O ADMIN CONTROLLER ---
+  public async sendEstabelecimentoApprovedEmail(
+    to: string,
+    nomeResponsavel: string,
+    nomeFantasia: string,
+    adminEdited: boolean = false,
+  ): Promise<void> {
+    const htmlContent = this.getHtmlTemplate("estabelecimento-aprovado", {
+      NOME_RESPONSAVEL: nomeResponsavel,
+      NOME_FANTASIA: nomeFantasia,
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Seu cadastro no MeideSaquá foi Aprovado!",
+      html: htmlContent,
+    });
+  }
+
+  public async sendEstabelecimentoUpdateApprovedEmail(
+    to: string,
+    nomeResponsavel: string,
+    nomeFantasia: string,
+    adminEdited: boolean = false,
+  ): Promise<void> {
+    const htmlContent = this.getHtmlTemplate("estabelecimento-atualizado", {
+      NOME_RESPONSAVEL: nomeResponsavel,
+      NOME_FANTASIA: nomeFantasia,
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
+      html: htmlContent,
+    });
+  }
+
+  public async sendEstabelecimentoDeletedEmail(
+    to: string,
+    nomeResponsavel: string,
+    nomeFantasia: string,
+  ): Promise<void> {
+    const htmlContent = this.getHtmlTemplate("estabelecimento-excluido", {
+      NOME_RESPONSAVEL: nomeResponsavel,
+      NOME_FANTASIA: nomeFantasia,
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Seu estabelecimento foi removido da plataforma MeideSaquá",
+      html: htmlContent,
+    });
+  }
+
+  public async sendEstabelecimentoRejectedEmail(
+    to: string,
+    nomeResponsavel: string,
+    nomeFantasia: string,
+    motivo: string | undefined,
+  ): Promise<void> {
+    const htmlContent = this.getHtmlTemplate("estabelecimento-rejeitado", {
+      NOME_RESPONSAVEL: nomeResponsavel,
+      NOME_FANTASIA: nomeFantasia,
+      MOTIVO_REJEICAO:
+        motivo || "Para mais detalhes, entre em contato conosco.",
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Sua solicitação no MeideSaquá foi Rejeitada",
+      html: htmlContent,
+    });
+  }
+
+  public async sendAdminResendConfirmationEmail(
+    to: string,
+    token: string,
+  ): Promise<void> {
+    const confirmationUrl = `${process.env.FRONTEND_URL || "https://meidesaqua.saquarema.rj.gov.br"}/confirmar-conta?token=${token}`;
+    const htmlContent = this.getHtmlTemplate("confirmacao", {
+      LINK_CONFIRMACAO: confirmationUrl,
+    });
+    await this.transporter.sendMail({
+      from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
+      to,
+      subject: "Confirme sua conta no MeideSaquá (Reenvio Admin)",
+      html: htmlContent,
+    });
   }
 
   public async sendGenericEmail(options: EmailOptions): Promise<void> {
