@@ -289,7 +289,6 @@ export class AdminController {
               estabelecimento.emailEstabelecimento,
               estabelecimento.nomeResponsavel,
               estabelecimento.nomeFantasia,
-              true,
             ); // O seu HTML antigo tinha "com edições do admin" aqui
           } else if (actionForEmail === "DELETED") {
             await EmailService.sendEstabelecimentoDeletedEmail(
@@ -474,7 +473,6 @@ export class AdminController {
           estabelecimento.emailEstabelecimento,
           estabelecimento.nomeResponsavel,
           estabelecimento.nomeFantasia,
-          true,
         ).catch(() => {});
       }
 

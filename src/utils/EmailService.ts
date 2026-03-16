@@ -97,9 +97,6 @@ class EmailService {
     const htmlContent = this.getHtmlTemplate("estabelecimento-aprovado", {
       NOME_RESPONSAVEL: nomeResponsavel,
       NOME_FANTASIA: nomeFantasia,
-      AVISO_EDICAO: adminEdited
-        ? " (com algumas edições do administrador)"
-        : "",
     });
     await this.transporter.sendMail({
       from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
@@ -118,9 +115,6 @@ class EmailService {
     const htmlContent = this.getHtmlTemplate("estabelecimento-atualizado", {
       NOME_RESPONSAVEL: nomeResponsavel,
       NOME_FANTASIA: nomeFantasia,
-      AVISO_EDICAO: adminEdited
-        ? " (com algumas edições do administrador)"
-        : "",
     });
     await this.transporter.sendMail({
       from: `"MeideSaquá" <${process.env.MAIL_USER}>`,
