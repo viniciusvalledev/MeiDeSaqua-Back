@@ -11,7 +11,7 @@ interface EmailOptions {
 class EmailService {
   private transporter;
 
-  constructor() {
+ constructor() {
     this.transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
       port: Number(process.env.MAIL_PORT),
@@ -21,8 +21,8 @@ class EmailService {
         pass: process.env.MAIL_PASS,
       },
       tls: {
-        rejectUnauthorized: false,
-      },
+      rejectUnauthorized: false,
+    },
     });
   }
 
