@@ -268,8 +268,13 @@ export class AdminController {
           break;
 
         case StatusEstabelecimento.PENDENTE_EXCLUSAO:
-          await estabelecimento.destroy({ transaction });
-          responseMessage = "Estabelecimento excluído com sucesso.";
+          // AQUI ESTÁ A NOVA LÓGICA DE EXCLUSÃO LÓGICA
+          estabelecimento.status = StatusEstabelecimento.INATIVO;
+          estabelecimento.ativo = false;
+          estabelecimento.dados_atualizacao = null;
+          await estabelecimento.save({ transaction });
+
+          responseMessage = "Estabelecimento desativado com sucesso (Inativo).";
           actionForEmail = "DELETED";
           break;
       }
@@ -289,7 +294,7 @@ export class AdminController {
               estabelecimento.emailEstabelecimento,
               estabelecimento.nomeResponsavel,
               estabelecimento.nomeFantasia,
-            ); // O seu HTML antigo tinha "com edições do admin" aqui
+            );
           } else if (actionForEmail === "DELETED") {
             await EmailService.sendEstabelecimentoDeletedEmail(
               estabelecimento.emailEstabelecimento,
@@ -487,6 +492,7 @@ export class AdminController {
         .json({ message: "Erro ao processar solicitação." });
     }
   }
+
   static async getAllActiveEstabelecimentos(req: Request, res: Response) {
     try {
       // Esta função chama o Service, que já está correto
@@ -497,6 +503,49 @@ export class AdminController {
       return res
         .status(500)
         .json({ message: "Erro ao buscar estabelecimentos ativos." });
+    }
+  }
+
+  static async getAllEstabelecimentosGeral(req: Request, res: Response) {
+    try {
+      const estabelecimentos =
+        await EstabelecimentoService.listarParaAdminGeral();
+      return res.status(200).json(estabelecimentos);
+    } catch (error) {
+      console.error("Erro ao buscar todos os estabelecimentos:", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao buscar estabelecimentos." });
+    }
+  }
+
+  static async toggleEstabelecimentoStatus(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      const { ativo } = req.body;
+
+      if (typeof ativo !== "boolean") {
+        return res.status(400).json({
+          message:
+            "O corpo da requisição deve conter a chave 'ativo' com um valor booleano (true/false).",
+        });
+      }
+
+      // Chama a função que altera o status (que já modificamos no service)
+      const estabelecimento = await EstabelecimentoService.alterarStatusAtivo(
+        id,
+        ativo,
+      );
+
+      return res.status(200).json({
+        message: `Estabelecimento ${ativo ? "ativado" : "desativado"} com sucesso.`,
+        estabelecimento,
+      });
+    } catch (error: any) {
+      console.error("Erro ao alterar status do estabelecimento:", error);
+      return res
+        .status(500)
+        .json({ message: error.message || "Erro ao alterar status." });
     }
   }
 

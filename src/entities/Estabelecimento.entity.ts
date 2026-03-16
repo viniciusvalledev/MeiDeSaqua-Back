@@ -8,6 +8,7 @@ export enum StatusEstabelecimento {
   PENDENTE_ATUALIZACAO = "pendente_atualizacao",
   PENDENTE_EXCLUSAO = "pendente_exclusao",
   REJEITADO = "rejeitado",
+  INATIVO = "inativo",
 }
 
 class Estabelecimento extends Model {
@@ -145,17 +146,17 @@ Estabelecimento.init(
       field: "venda",
     },
     escala: {
-      type: DataTypes.INTEGER, 
-      allowNull: false,        
-      defaultValue: 0,         
-      field: 'escala',         
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      field: "escala",
     },
   },
   {
     sequelize,
     tableName: "estabelecimentos",
     timestamps: true,
-  }
+  },
 );
 
 export default Estabelecimento;
