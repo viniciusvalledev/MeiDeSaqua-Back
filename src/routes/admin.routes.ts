@@ -92,7 +92,12 @@ router.post(
   AdminController.resendConfirmationEmail,
 );
 
-// Rota para buscar TODOS os estabelecimentos (Ativos e Inativos) para a aba "Geral"
+router.get(
+  "/users/:id/interacoes",
+  adminAuthMiddleware,
+  AdminController.getUserInteractions,
+);
+
 router.get(
   "/estabelecimentos-geral",
   adminAuthMiddleware,

@@ -1250,4 +1250,101 @@ export class AdminController {
         .json({ message: "Erro ao enviar email de confirmação." });
     }
   }
+
+  static async getUserInteractions(req: Request, res: Response) {
+    const { id } = req.params;
+
+    try {
+      const usuarioId = parseInt(id);
+
+      const usuario = await Usuario.findByPk(usuarioId);
+      if (!usuario) {
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      const estabelecimentosRaw = await Estabelecimento.findAll({
+        where: { emailEstabelecimento: usuario.email },
+        attributes: [
+          "estabelecimentoId",
+          "nomeFantasia",
+          "categoria",
+          "status",
+        ],
+      });
+
+      const meis = estabelecimentosRaw.map((est) => ({
+        id: est.estabelecimentoId,
+        nome: est.nomeFantasia,
+        categoria: est.categoria,
+        status:
+          est.status === StatusEstabelecimento.ATIVO
+            ? "Ativo"
+            : est.status === StatusEstabelecimento.PENDENTE_APROVACAO
+              ? "Pendente"
+              : "Inativo",
+      }));
+
+      // BUSCA AS AVALIAÇÕES E O COMENTÁRIO "PAI" DE CADA UMA
+      const avaliacoesRaw = await Avaliacao.findAll({
+        where: { usuarioId: usuarioId },
+        include: [
+          {
+            model: Estabelecimento,
+            as: "estabelecimento",
+            attributes: ["nomeFantasia"],
+          },
+          {
+            model: Avaliacao, // Puxa o Comentário Pai
+            as: "pai",
+            include: [
+              {
+                model: Usuario, // Puxa quem escreveu o Comentário Pai
+                as: "usuario",
+                attributes: ["nomeCompleto"],
+              },
+            ],
+          },
+        ],
+        order: [["avaliacoesId", "DESC"]],
+      });
+
+      const comentarios: any[] = [];
+      const avaliacoes: any[] = [];
+
+      avaliacoesRaw.forEach((av: any) => {
+        const nomeEstabelecimento =
+          av.estabelecimento?.nomeFantasia || "Estabelecimento Excluído";
+
+        // Verifica se é uma resposta
+        const isReply = av.parentId !== null && av.parentId !== undefined;
+
+        // SE NÃO FOR RESPOSTA (!isReply), adiciona à lista de comentários
+        if (!isReply && av.comentario && av.comentario.trim() !== "") {
+          comentarios.push({
+            id: av.avaliacoesId || av.id,
+            estabelecimento: nomeEstabelecimento,
+            texto: av.comentario,
+            data: "-",
+          });
+        }
+
+        // As avaliações com nota continuam iguais
+        if (av.nota !== null && av.nota !== undefined) {
+          avaliacoes.push({
+            id: av.avaliacoesId || av.id,
+            estabelecimento: nomeEstabelecimento,
+            nota: av.nota,
+            data: "-",
+          });
+        }
+      });
+
+      return res.status(200).json({ meis, comentarios, avaliacoes });
+    } catch (error) {
+      console.error("Erro ao buscar interações do usuário:", error);
+      return res
+        .status(500)
+        .json({ message: "Erro interno ao buscar interações." });
+    }
+  }
 }
