@@ -256,6 +256,35 @@ class EstabelecimentoController {
     }
   };
 
+  public listarMeusEstabelecimentos = async (
+    req: Request,
+    res: Response,
+  ): Promise<Response> => {
+    try {
+      const usuarioId = (req as any).user?.id;
+      if (!usuarioId) {
+        return res.status(401).json({ message: "Sessão inválida." });
+      }
+
+      const meusMeis = await Estabelecimento.findAll({
+        where: { usuarioId: usuarioId },
+        attributes: [
+          "estabelecimentoId",
+          "nomeFantasia",
+          "cnpj",
+          "categoria",
+          "status",
+          "logoUrl",
+        ],
+      });
+
+      return res.status(200).json(meusMeis);
+    } catch (error: any) {
+      console.error("Erro ao listar MEIs do usuário:", error);
+      return res.status(500).json({ message: "Erro interno do servidor." });
+    }
+  };
+
   public buscarPorNome = async (
     req: Request,
     res: Response,
@@ -288,6 +317,7 @@ class EstabelecimentoController {
       return this._handleError(error, res);
     }
   };
+
   public alterarStatus = async (
     req: Request,
     res: Response,

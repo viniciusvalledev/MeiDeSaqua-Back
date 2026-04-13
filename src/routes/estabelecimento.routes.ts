@@ -40,6 +40,11 @@ const router = Router();
 
 router.get("/", EstabelecimentoController.listarTodos);
 router.get("/buscar", EstabelecimentoController.buscarPorNome);
+router.get(
+  "/meus-estabelecimentos",
+  authMiddleware,
+  EstabelecimentoController.listarMeusEstabelecimentos,
+);
 router.get("/:id", EstabelecimentoController.buscarPorId);
 
 router.post(
