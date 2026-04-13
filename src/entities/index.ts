@@ -36,6 +36,16 @@ Avaliacao.belongsTo(Avaliacao, {
   as: "pai",
 });
 
+Usuario.hasMany(Estabelecimento, {
+  foreignKey: "usuarioId",
+  as: "estabelecimentos",
+});
+
+Estabelecimento.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "proprietario",
+});
+
 export {
   Usuario,
   Estabelecimento,

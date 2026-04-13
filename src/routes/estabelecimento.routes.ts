@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import EstabelecimentoController from "../controllers/EstabelecimentoController";
 import { compressImages } from "../middlewares/compression.middleware";
+import { authMiddleware } from "../middlewares/auth.middleware";
 
 // Define o caminho para a pasta de uploads de forma segura
 const UPLOADS_DIR = path.resolve("uploads");
@@ -23,7 +24,7 @@ const storage = multer.diskStorage({
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(
       null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
+      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
     );
   },
 });
@@ -43,37 +44,39 @@ router.get("/:id", EstabelecimentoController.buscarPorId);
 
 router.post(
   "/",
+  authMiddleware,
   upload.fields([
     { name: "logo", maxCount: 1 },
-    { name: "produtos", maxCount: 5 },
     { name: "ccmei", maxCount: 1 },
+    { name: "produtos", maxCount: 5 },
   ]),
   compressImages,
-  EstabelecimentoController.cadastrar
+  EstabelecimentoController.cadastrar,
 );
 
 router.put(
   "/solicitar-atualizacao",
+  authMiddleware,
   upload.fields([
     { name: "logo", maxCount: 1 },
     { name: "produtos", maxCount: 5 },
     { name: "ccmei", maxCount: 1 },
   ]),
   compressImages,
-  EstabelecimentoController.solicitarAtualizacao
+  EstabelecimentoController.solicitarAtualizacao,
 );
 
 router.post(
   "/solicitar-exclusao",
   upload.fields([{ name: "ccmei", maxCount: 1 }]),
-  EstabelecimentoController.solicitarExclusao
+  EstabelecimentoController.solicitarExclusao,
 );
 
 router.post("/:id/status", EstabelecimentoController.alterarStatus);
 
 router.post(
   "/visualizacao/:identificador",
-  EstabelecimentoController.registrarVisualizacao
+  EstabelecimentoController.registrarVisualizacao,
 );
 
 export default router;

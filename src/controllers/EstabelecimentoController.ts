@@ -120,11 +120,32 @@ class EstabelecimentoController {
 
   public cadastrar = async (req: Request, res: Response): Promise<Response> => {
     try {
+      console.log("\n[CONTROLLER DEBUG] 🏢 Entrou no método cadastrar!");
+      console.log("[CONTROLLER DEBUG] Valor do req.user:", (req as any).user);
+
+      const usuarioId = (req as any).user?.id;
+      console.log(
+        "[CONTROLLER DEBUG] Valor do usuarioId capturado:",
+        usuarioId,
+      );
+
+      if (!usuarioId) {
+        console.log(
+          "[CONTROLLER DEBUG] ⚠️ Travando requisição: usuarioId está undefined.",
+        );
+        return res
+          .status(401)
+          .json({ message: "Sessão inválida. Faça login novamente." });
+      }
+
       const dadosCompletos = await this._moveFilesAndPrepareData(req);
+      dadosCompletos.usuarioId = usuarioId;
+
       const novoEstabelecimento =
         await EstabelecimentoService.cadastrarEstabelecimentoComImagens(
           dadosCompletos,
         );
+
       return res.status(201).json(novoEstabelecimento);
     } catch (error: any) {
       await this._deleteUploadedFilesOnFailure(req);
