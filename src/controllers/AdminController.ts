@@ -1263,12 +1263,13 @@ export class AdminController {
       }
 
       const estabelecimentosRaw = await Estabelecimento.findAll({
-        where: { emailEstabelecimento: usuario.email },
+        where: { usuarioId: usuarioId },
         attributes: [
           "estabelecimentoId",
           "nomeFantasia",
           "categoria",
           "status",
+          "cnpj",
         ],
       });
 
@@ -1276,6 +1277,7 @@ export class AdminController {
         id: est.estabelecimentoId,
         nome: est.nomeFantasia,
         categoria: est.categoria,
+        cnpj: est.cnpj,
         status:
           est.status === StatusEstabelecimento.ATIVO
             ? "Ativo"
@@ -1284,7 +1286,6 @@ export class AdminController {
               : "Inativo",
       }));
 
-      // BUSCA AS AVALIAÇÕES E O COMENTÁRIO "PAI" DE CADA UMA
       const avaliacoesRaw = await Avaliacao.findAll({
         where: { usuarioId: usuarioId },
         include: [
@@ -1294,11 +1295,11 @@ export class AdminController {
             attributes: ["nomeFantasia"],
           },
           {
-            model: Avaliacao, // Puxa o Comentário Pai
+            model: Avaliacao,
             as: "pai",
             include: [
               {
-                model: Usuario, // Puxa quem escreveu o Comentário Pai
+                model: Usuario,
                 as: "usuario",
                 attributes: ["nomeCompleto"],
               },
@@ -1308,38 +1309,22 @@ export class AdminController {
         order: [["avaliacoesId", "DESC"]],
       });
 
-      const comentarios: any[] = [];
-      const avaliacoes: any[] = [];
+      const interacoes = avaliacoesRaw.map((av: any) => ({
+        id: av.avaliacoesId || av.id,
+        estabelecimento:
+          av.estabelecimento?.nomeFantasia || "Estabelecimento Excluído",
+        texto: av.comentario || "",
+        nota: av.nota || null,
+        isReply: av.parentId !== null && av.parentId !== undefined,
+        parentTexto: av.pai ? av.pai.comentario : null,
+        parentAutor: av.pai?.usuario ? av.pai.usuario.nomeCompleto : "Usuário",
+        data: av.createdAt ? new Date(av.createdAt).toLocaleDateString() : "-",
+      }));
 
-      avaliacoesRaw.forEach((av: any) => {
-        const nomeEstabelecimento =
-          av.estabelecimento?.nomeFantasia || "Estabelecimento Excluído";
-
-        // Verifica se é uma resposta
-        const isReply = av.parentId !== null && av.parentId !== undefined;
-
-        // SE NÃO FOR RESPOSTA (!isReply), adiciona à lista de comentários
-        if (!isReply && av.comentario && av.comentario.trim() !== "") {
-          comentarios.push({
-            id: av.avaliacoesId || av.id,
-            estabelecimento: nomeEstabelecimento,
-            texto: av.comentario,
-            data: "-",
-          });
-        }
-
-        // As avaliações com nota continuam iguais
-        if (av.nota !== null && av.nota !== undefined) {
-          avaliacoes.push({
-            id: av.avaliacoesId || av.id,
-            estabelecimento: nomeEstabelecimento,
-            nota: av.nota,
-            data: "-",
-          });
-        }
+      return res.status(200).json({
+        estabelecimentos: meis,
+        avaliacoes: interacoes,
       });
-
-      return res.status(200).json({ meis, comentarios, avaliacoes });
     } catch (error) {
       console.error("Erro ao buscar interações do usuário:", error);
       return res
