@@ -1,10 +1,8 @@
 import { Request, Response } from "express";
 import AuthService from "../services/AuthService";
-import Estabelecimento, {
-  StatusEstabelecimento,
-} from "../entities/Estabelecimento.entity";
-import ImagemProduto from "../entities/ImagemProduto.entity"; // ADICIONAR IMPORT
-import * as jwt from "jsonwebtoken";
+import Usuario from "../entities/Usuario.entity";
+import * as crypto from "crypto";
+import EmailService from "../utils/EmailService";
 import { Op } from "sequelize";
 
 class AuthController {
@@ -61,6 +59,53 @@ class AuthController {
     }
   }
 
+  public async resendConfirmation(
+    req: Request,
+    res: Response,
+  ): Promise<Response> {
+    try {
+      const { username } = req.body;
+
+      if (!username) {
+        return res
+          .status(400)
+          .json({ message: "Usuário/E-mail é obrigatório." });
+      }
+
+      const usuario = await Usuario.findOne({
+        where: {
+          [Op.or]: [{ username: username }, { email: username }],
+        },
+      });
+
+      if (!usuario) {
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      if (usuario.enabled) {
+        return res
+          .status(400)
+          .json({ message: "Esta conta já está verificada." });
+      }
+
+      const confirmationToken = crypto.randomBytes(20).toString("hex");
+      usuario.confirmationToken = confirmationToken;
+      await usuario.save();
+
+      await EmailService.sendConfirmationEmail(
+        usuario.email,
+        confirmationToken,
+      );
+
+      return res
+        .status(200)
+        .json({ message: "E-mail de confirmação reenviado com sucesso!" });
+    } catch (error: any) {
+      console.error("Erro ao reenviar confirmação:", error);
+      return res.status(500).json({ message: "Erro ao reenviar o e-mail." });
+    }
+  }
+
   public async forgotPassword(req: Request, res: Response): Promise<Response> {
     try {
       await AuthService.forgotPassword(req.body.email);
@@ -88,7 +133,7 @@ class AuthController {
 
   public async confirmEmailChange(
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> {
     try {
       await AuthService.confirmEmailChange(req.query.token as string);

@@ -91,6 +91,26 @@ router.post(
   adminAuthMiddleware,
   AdminController.resendConfirmationEmail,
 );
+
+router.get(
+  "/users/:id/interacoes",
+  adminAuthMiddleware,
+  AdminController.getUserInteractions,
+);
+
+router.get(
+  "/estabelecimentos-geral",
+  adminAuthMiddleware,
+  AdminController.getAllEstabelecimentosGeral,
+);
+
+// Rota para o Admin ativar/desativar um estabelecimento manualmente
+router.put(
+  "/estabelecimento/:id/status",
+  adminAuthMiddleware,
+  AdminController.toggleEstabelecimentoStatus,
+);
+
 // =================================
 
 export default router;

@@ -14,6 +14,7 @@ import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import avaliacaoRoutes from "./routes/avaliacao.routes";
 import estabelecimentoRoutes from "./routes/estabelecimento.routes";
+import cursoRoutes from "./routes/curso.routes";
 import fileRoutes from "./routes/file.routes";
 import adminRoutes from "./routes/admin.routes";
 import { authMiddleware } from "./middlewares/auth.middleware";
@@ -21,7 +22,7 @@ import { authMiddleware } from "./middlewares/auth.middleware";
 const app = express();
 const uploadsPath = path.resolve(process.cwd(), "uploads");
 
-app.use(cors());
+app.use(cors({ allowedHeaders: ["Content-Type", "Authorization"] }));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
@@ -46,6 +47,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/estabelecimentos", estabelecimentoRoutes);
 app.use("/api/avaliacoes", avaliacaoRoutes);
 app.use("/api/files", fileRoutes);
+app.use("/api/cursos", cursoRoutes);
 
 app.use("/api/admin", adminRoutes);
 
