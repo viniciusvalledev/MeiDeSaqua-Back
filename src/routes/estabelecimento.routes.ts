@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import EstabelecimentoController from "../controllers/EstabelecimentoController";
 import { compressImages } from "../middlewares/compression.middleware";
+import { authMiddleware } from "../middlewares/auth.middleware";
 
 // Define o caminho para a pasta de uploads de forma segura
 const UPLOADS_DIR = path.resolve("uploads");
@@ -43,6 +44,7 @@ router.get("/:id", EstabelecimentoController.buscarPorId);
 
 router.post(
   "/",
+  authMiddleware,
   upload.fields([
     { name: "logo", maxCount: 1 },
     { name: "produtos", maxCount: 5 },

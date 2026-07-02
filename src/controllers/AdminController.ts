@@ -516,6 +516,52 @@ export class AdminController {
     }
   }
 
+  static async getAllInactiveEstabelecimentos(req: Request, res: Response) {
+    try {
+      const estabelecimentos = await EstabelecimentoService.listarInativos();
+      return res.json(estabelecimentos);
+    } catch (error) {
+      console.error(error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao buscar estabelecimentos inativos." });
+    }
+  }
+
+  static async adminAlterarStatusEstabelecimento(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { ativo } = req.body;
+
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "ID do estabelecimento inválido." });
+      }
+
+      if (typeof ativo !== "boolean") {
+        return res.status(400).json({
+          message:
+            "O corpo da requisição deve conter a chave 'ativo' com um valor booleano (true/false).",
+        });
+      }
+
+      const estabelecimento = await EstabelecimentoService.alterarStatusAtivo(
+        id,
+        ativo,
+      );
+
+      return res.status(200).json(estabelecimento);
+    } catch (error: any) {
+      if (error.message === "Estabelecimento não encontrado.") {
+        return res.status(404).json({ message: error.message });
+      }
+
+      console.error("Erro ao alterar status do estabelecimento (admin):", error);
+      return res
+        .status(500)
+        .json({ message: "Erro interno ao alterar status do estabelecimento." });
+    }
+  }
+
   static async adminUpdateEstabelecimento(req: Request, res: Response) {
     const { id } = req.params;
     const adminEditedData = req.body;

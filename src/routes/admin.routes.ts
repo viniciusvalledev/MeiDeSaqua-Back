@@ -33,11 +33,29 @@ router.get(
   AdminController.getAllActiveEstabelecimentos,
 );
 
+router.get(
+  "/estabelecimentos-geral",
+  adminAuthMiddleware,
+  AdminController.getAllActiveEstabelecimentos,
+);
+
+router.get(
+  "/estabelecimentos-inativos",
+  adminAuthMiddleware,
+  AdminController.getAllInactiveEstabelecimentos,
+);
+
 router.patch(
   "/estabelecimento/:id",
   adminAuthMiddleware,
   upload.any(),
   AdminController.adminUpdateEstabelecimento,
+);
+
+router.put(
+  "/estabelecimento/:id/status",
+  adminAuthMiddleware,
+  AdminController.adminAlterarStatusEstabelecimento,
 );
 
 router.delete(

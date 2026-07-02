@@ -12,6 +12,7 @@ export enum StatusEstabelecimento {
 
 class Estabelecimento extends Model {
   public estabelecimentoId!: number;
+  public usuarioId!: number;
   public categoria!: string;
   public contatoEstabelecimento!: string;
   public cnpj!: string;
@@ -42,6 +43,11 @@ Estabelecimento.init(
       autoIncrement: true,
       primaryKey: true,
       field: "estabelecimento_id",
+    },
+    usuarioId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      field: "usuario_id",
     },
     categoria: {
       type: DataTypes.STRING,

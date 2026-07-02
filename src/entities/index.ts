@@ -6,6 +6,13 @@ import Avaliacao from "./Avaliacao.entity";
 import ImagemProduto from "./ImagemProduto.entity";
 import ContadorVisualizacao from "./ContadorVisualizacao.entity";
 
+// Usuário <-> Estabelecimento
+Usuario.hasMany(Estabelecimento, {
+  foreignKey: "usuarioId",
+  as: "estabelecimentos",
+});
+Estabelecimento.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
+
 // Usuário <-> Avaliação
 Usuario.hasMany(Avaliacao, { foreignKey: "usuarioId", as: "avaliacoes" });
 Avaliacao.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });

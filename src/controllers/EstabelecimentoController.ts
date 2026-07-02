@@ -7,6 +7,7 @@ import path from "path";
 import Estabelecimento from "../entities/Estabelecimento.entity";
 import ContadorVisualizacao from "../entities/ContadorVisualizacao.entity";
 import { sanitizeFilename } from "../utils/stringUtils";
+import { AuthenticatedRequest } from "../interfaces/requests";
 
 class EstabelecimentoController {
   private _deleteUploadedFilesOnFailure = async (req: Request) => {
@@ -118,9 +119,19 @@ class EstabelecimentoController {
     };
   };
 
-  public cadastrar = async (req: Request, res: Response): Promise<Response> => {
+  public cadastrar = async (
+    req: AuthenticatedRequest,
+    res: Response,
+  ): Promise<Response> => {
     try {
+      const usuarioId = req.user?.id;
+      if (!usuarioId) {
+        return res.status(401).json({ message: "Não autorizado." });
+      }
+
       const dadosCompletos = await this._moveFilesAndPrepareData(req);
+      dadosCompletos.usuarioId = usuarioId;
+
       const novoEstabelecimento =
         await EstabelecimentoService.cadastrarEstabelecimentoComImagens(
           dadosCompletos,
