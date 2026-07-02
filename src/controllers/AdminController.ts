@@ -147,15 +147,26 @@ export class AdminController {
           .status(404)
           .json({ message: "Estabelecimento não encontrado." });
       }
-
-      let actionForEmail: "APPROVED" | "UPDATED" | "DELETED" | null = null;
+      let emailInfo: { subject: string; html: string } | null = null;
 
       switch (estabelecimento.status) {
         case StatusEstabelecimento.PENDENTE_APROVACAO:
           estabelecimento.status = StatusEstabelecimento.ATIVO;
           estabelecimento.ativo = true;
           await estabelecimento.save({ transaction });
-          actionForEmail = "APPROVED";
+
+          emailInfo = {
+            subject: "Seu cadastro no MeideSaquá foi Aprovado!",
+            html: `
+              <h1>Olá, ${estabelecimento.nomeResponsavel}!</h1>
+              <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado e já está visível na nossa plataforma!</p>
+              <p>A partir de agora, clientes podem encontrar o seu negócio e deixar avaliações.</p>
+              <p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p>
+              <br>
+              <p>Atenciosamente,</p>
+              <p><strong>Equipe MeideSaquá.</strong></p>
+            `,
+          };
           break;
 
         case StatusEstabelecimento.PENDENTE_ATUALIZACAO:
@@ -181,6 +192,8 @@ export class AdminController {
               "tagsInvisiveis",
               "website",
               "instagram",
+              "descricaoDiferencial",
+              "descricao",
               "objetivo",
               "justificativa",
               "publicoAlvo",
@@ -264,44 +277,41 @@ export class AdminController {
             estabelecimento.ativo = true;
             await estabelecimento.save({ transaction });
           }
-          actionForEmail = "UPDATED";
+
+          emailInfo = {
+            subject: "Seu cadastro no MeideSaquá foi Aprovado!",
+            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1> <p>Temos uma ótima notícia: o seu estabelecimento, <strong>${estabelecimento.nomeFantasia}</strong>, foi aprovado (com algumas edições do administrador) e já está visível na nossa plataforma!</p><p>Agradecemos por fazer parte da comunidade de empreendedores de Saquarema.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá.</strong></p>`,
+          };
           break;
 
         case StatusEstabelecimento.PENDENTE_EXCLUSAO:
-          // AQUI ESTÁ A NOVA LÓGICA DE EXCLUSÃO LÓGICA
-          estabelecimento.status = StatusEstabelecimento.INATIVO;
-          estabelecimento.ativo = false;
-          estabelecimento.dados_atualizacao = null;
-          await estabelecimento.save({ transaction });
+          emailInfo = {
+            subject:
+              "Seu estabelecimento foi removido da plataforma MeideSaquá",
+            html: `
+              <h1>Olá, ${estabelecimento.nomeResponsavel}.</h1>
+              <p>Informamos que a sua solicitação para remover o estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> da nossa plataforma foi concluída com sucesso.</p>
+              <p>Lamentamos a sua partida e esperamos poder colaborar com você novamente no futuro.</p>
+              <br>
+              <p>Atenciosamente,</p>
+              <p><strong>Equipe MeideSaquá</strong></p>
+            `,
+          };
+          await estabelecimento.destroy({ transaction });
+          responseMessage = "Estabelecimento excluído com sucesso.";
 
-          responseMessage = "Estabelecimento desativado com sucesso (Inativo).";
-          actionForEmail = "DELETED";
           break;
       }
 
       await transaction.commit();
 
-      if (actionForEmail && estabelecimento.emailEstabelecimento) {
+      if (emailInfo && estabelecimento.emailEstabelecimento) {
         try {
-          if (actionForEmail === "APPROVED") {
-            await EmailService.sendEstabelecimentoApprovedEmail(
-              estabelecimento.emailEstabelecimento,
-              estabelecimento.nomeResponsavel,
-              estabelecimento.nomeFantasia,
-            );
-          } else if (actionForEmail === "UPDATED") {
-            await EmailService.sendEstabelecimentoUpdateApprovedEmail(
-              estabelecimento.emailEstabelecimento,
-              estabelecimento.nomeResponsavel,
-              estabelecimento.nomeFantasia,
-            );
-          } else if (actionForEmail === "DELETED") {
-            await EmailService.sendEstabelecimentoDeletedEmail(
-              estabelecimento.emailEstabelecimento,
-              estabelecimento.nomeResponsavel,
-              estabelecimento.nomeFantasia,
-            );
-          }
+          await EmailService.sendGenericEmail({
+            to: estabelecimento.emailEstabelecimento,
+            subject: emailInfo.subject,
+            html: emailInfo.html,
+          });
           console.log(
             `Email de notificação enviado com sucesso para ${estabelecimento.emailEstabelecimento}`,
           );
@@ -311,7 +321,7 @@ export class AdminController {
             error,
           );
         }
-      } else if (actionForEmail) {
+      } else if (emailInfo) {
         console.warn(
           `Tentativa de enviar email para estabelecimento ID ${estabelecimento.estabelecimentoId} sem emailContato definido.`,
         );
@@ -474,11 +484,11 @@ export class AdminController {
       await transaction.commit();
 
       if (estabelecimento.emailEstabelecimento) {
-        EmailService.sendEstabelecimentoUpdateApprovedEmail(
-          estabelecimento.emailEstabelecimento,
-          estabelecimento.nomeResponsavel,
-          estabelecimento.nomeFantasia,
-        ).catch(() => {});
+        EmailService.sendGenericEmail({
+          to: estabelecimento.emailEstabelecimento,
+          subject: "Sua solicitação de atualização no MeideSaquá foi Aprovada!",
+          html: `<h1>Olá, ${estabelecimento.nomeResponsavel}!</h1><p>A sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> foi aprovada (com algumas edições do administrador).</p><p>As novas informações já estão visíveis para todos na plataforma.</p><br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
+        }).catch(() => {});
       }
 
       return res
@@ -503,49 +513,6 @@ export class AdminController {
       return res
         .status(500)
         .json({ message: "Erro ao buscar estabelecimentos ativos." });
-    }
-  }
-
-  static async getAllEstabelecimentosGeral(req: Request, res: Response) {
-    try {
-      const estabelecimentos =
-        await EstabelecimentoService.listarParaAdminGeral();
-      return res.status(200).json(estabelecimentos);
-    } catch (error) {
-      console.error("Erro ao buscar todos os estabelecimentos:", error);
-      return res
-        .status(500)
-        .json({ message: "Erro ao buscar estabelecimentos." });
-    }
-  }
-
-  static async toggleEstabelecimentoStatus(req: Request, res: Response) {
-    try {
-      const id = parseInt(req.params.id);
-      const { ativo } = req.body;
-
-      if (typeof ativo !== "boolean") {
-        return res.status(400).json({
-          message:
-            "O corpo da requisição deve conter a chave 'ativo' com um valor booleano (true/false).",
-        });
-      }
-
-      // Chama a função que altera o status (que já modificamos no service)
-      const estabelecimento = await EstabelecimentoService.alterarStatusAtivo(
-        id,
-        ativo,
-      );
-
-      return res.status(200).json({
-        message: `Estabelecimento ${ativo ? "ativado" : "desativado"} com sucesso.`,
-        estabelecimento,
-      });
-    } catch (error: any) {
-      console.error("Erro ao alterar status do estabelecimento:", error);
-      return res
-        .status(500)
-        .json({ message: error.message || "Erro ao alterar status." });
     }
   }
 
@@ -705,19 +672,41 @@ export class AdminController {
       }
 
       let responseMessage = "Solicitação rejeitada com sucesso.";
+      let emailInfo: { subject: string; html: string } | null = null;
       const emailParaNotificar = estabelecimento.emailEstabelecimento;
-      const statusAnterior = estabelecimento.status;
+      const motivoHtml = motivoRejeicao
+        ? `<p><strong>Motivo da Rejeição:</strong> ${motivoRejeicao}</p>`
+        : "<p>Para mais detalhes, entre em contato conosco.</p>";
 
       if (estabelecimento.status === StatusEstabelecimento.PENDENTE_APROVACAO) {
         await estabelecimento.destroy({ transaction });
         responseMessage = "Cadastro de estabelecimento rejeitado e removido.";
+
+        emailInfo = {
+          subject: "Seu cadastro no MeideSaquá foi Rejeitado",
+          html: `<h1>Olá, ${estabelecimento.nomeResponsavel}.</h1><p>Lamentamos informar que o cadastro do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> não foi aprovado.</p>${motivoHtml}<br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
+        };
       } else if (
         estabelecimento.status === StatusEstabelecimento.PENDENTE_ATUALIZACAO ||
         estabelecimento.status === StatusEstabelecimento.PENDENTE_EXCLUSAO
       ) {
+        const statusAnterior = estabelecimento.status;
         estabelecimento.status = StatusEstabelecimento.ATIVO;
         estabelecimento.dados_atualizacao = null;
         await estabelecimento.save({ transaction });
+
+        if (statusAnterior === StatusEstabelecimento.PENDENTE_ATUALIZACAO) {
+          emailInfo = {
+            subject:
+              "Sua solicitação de atualização no MeideSaquá foi Rejeitada",
+            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}.</h1><p>Informamos que a sua solicitação para atualizar os dados do estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> não foi aprovada.</p><p>Os dados anteriores foram mantidos.</p>${motivoHtml}<br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
+          };
+        } else {
+          emailInfo = {
+            subject: "Sua solicitação de exclusão no MeideSaquá foi Rejeitada",
+            html: `<h1>Olá, ${estabelecimento.nomeResponsavel}.</h1><p>Informamos que a sua solicitação para remover o estabelecimento <strong>${estabelecimento.nomeFantasia}</strong> não foi aprovada.</p><p>Seu estabelecimento continua ativo na plataforma.</p>${motivoHtml}<br><p>Atenciosamente,</p><p><strong>Equipe MeideSaquá</strong></p>`,
+          };
+        }
       } else {
         await transaction.rollback();
         return res.status(400).json({
@@ -728,14 +717,13 @@ export class AdminController {
 
       await transaction.commit();
 
-      if (emailParaNotificar) {
+      if (emailInfo && emailParaNotificar) {
         try {
-          await EmailService.sendEstabelecimentoRejectedEmail(
-            emailParaNotificar,
-            estabelecimento.nomeResponsavel,
-            estabelecimento.nomeFantasia,
-            motivoRejeicao,
-          );
+          await EmailService.sendGenericEmail({
+            to: emailParaNotificar,
+            subject: emailInfo.subject,
+            html: emailInfo.html,
+          });
           console.log(
             `Email de rejeição enviado com sucesso para ${emailParaNotificar}`,
           );
@@ -1004,12 +992,7 @@ export class AdminController {
       const totalUsuarios = await Usuario.count();
       const visualizacoesRaw = await ContadorVisualizacao.findAll();
 
-      const pageViews = {
-        home: 0,
-        espacoMei: 0,
-        categoriasTotal: 0,
-        redirecionamento: 0,
-      };
+      const pageViews = { home: 0, espacoMei: 0, categoriasTotal: 0 };
       const mapaVisualizacoes: { [key: string]: number } = {};
       const mapaCursos: { [key: string]: number } = {};
 
@@ -1022,8 +1005,6 @@ export class AdminController {
           pageViews.home = v.visualizacoes;
         } else if (v.identificador === "ESPACO_MEI") {
           pageViews.espacoMei = v.visualizacoes;
-        } else if (v.identificador === "REDIRECIONAMENTO") {
-          pageViews.redirecionamento = v.visualizacoes;
         } else if (v.identificador.startsWith("CAT_")) {
           let nomeCat = v.identificador
             .replace("CAT_", "")
@@ -1231,14 +1212,27 @@ export class AdminController {
           .json({ message: "Este usuário já está confirmado e ativo." });
       }
 
+      // Gera um novo token de confirmação
       const confirmationToken = crypto.randomBytes(20).toString("hex");
       usuario.confirmationToken = confirmationToken;
       await usuario.save();
 
-      await EmailService.sendAdminResendConfirmationEmail(
-        usuario.email,
-        confirmationToken,
-      );
+      const confirmUrl = `${process.env.FRONTEND_URL}/confirmar-conta?token=${confirmationToken}`;
+
+      const emailHtml = `
+        <h1>Confirmação de Conta (Reenvio Admin)</h1>
+        <p>Olá, ${usuario.nomeCompleto}.</p>
+        <p>Um administrador solicitou o reenvio do seu link de confirmação.</p>
+        <p>Por favor, confirme seu cadastro clicando no link abaixo:</p>
+        <a href="${confirmUrl}" target="_blank">Confirmar minha conta</a>
+        <p>Se você não solicitou isso, ignore este email.</p>
+      `;
+
+      await EmailService.sendGenericEmail({
+        to: usuario.email,
+        subject: "Confirme sua conta no MeideSaquá",
+        html: emailHtml,
+      });
 
       return res
         .status(200)
@@ -1248,88 +1242,6 @@ export class AdminController {
       return res
         .status(500)
         .json({ message: "Erro ao enviar email de confirmação." });
-    }
-  }
-
-  static async getUserInteractions(req: Request, res: Response) {
-    const { id } = req.params;
-
-    try {
-      const usuarioId = parseInt(id);
-
-      const usuario = await Usuario.findByPk(usuarioId);
-      if (!usuario) {
-        return res.status(404).json({ message: "Usuário não encontrado." });
-      }
-
-      const estabelecimentosRaw = await Estabelecimento.findAll({
-        where: { usuarioId: usuarioId },
-        attributes: [
-          "estabelecimentoId",
-          "nomeFantasia",
-          "categoria",
-          "status",
-          "cnpj",
-        ],
-      });
-
-      const meis = estabelecimentosRaw.map((est) => ({
-        id: est.estabelecimentoId,
-        nome: est.nomeFantasia,
-        categoria: est.categoria,
-        cnpj: est.cnpj,
-        status:
-          est.status === StatusEstabelecimento.ATIVO
-            ? "Ativo"
-            : est.status === StatusEstabelecimento.PENDENTE_APROVACAO
-              ? "Pendente"
-              : "Inativo",
-      }));
-
-      const avaliacoesRaw = await Avaliacao.findAll({
-        where: { usuarioId: usuarioId },
-        include: [
-          {
-            model: Estabelecimento,
-            as: "estabelecimento",
-            attributes: ["nomeFantasia"],
-          },
-          {
-            model: Avaliacao,
-            as: "pai",
-            include: [
-              {
-                model: Usuario,
-                as: "usuario",
-                attributes: ["nomeCompleto"],
-              },
-            ],
-          },
-        ],
-        order: [["avaliacoesId", "DESC"]],
-      });
-
-      const interacoes = avaliacoesRaw.map((av: any) => ({
-        id: av.avaliacoesId || av.id,
-        estabelecimento:
-          av.estabelecimento?.nomeFantasia || "Estabelecimento Excluído",
-        texto: av.comentario || "",
-        nota: av.nota || null,
-        isReply: av.parentId !== null && av.parentId !== undefined,
-        parentTexto: av.pai ? av.pai.comentario : null,
-        parentAutor: av.pai?.usuario ? av.pai.usuario.nomeCompleto : "Usuário",
-        data: av.createdAt ? new Date(av.createdAt).toLocaleDateString() : "-",
-      }));
-
-      return res.status(200).json({
-        estabelecimentos: meis,
-        avaliacoes: interacoes,
-      });
-    } catch (error) {
-      console.error("Erro ao buscar interações do usuário:", error);
-      return res
-        .status(500)
-        .json({ message: "Erro interno ao buscar interações." });
     }
   }
 }

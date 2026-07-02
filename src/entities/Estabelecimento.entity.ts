@@ -8,12 +8,10 @@ export enum StatusEstabelecimento {
   PENDENTE_ATUALIZACAO = "pendente_atualizacao",
   PENDENTE_EXCLUSAO = "pendente_exclusao",
   REJEITADO = "rejeitado",
-  INATIVO = "inativo",
 }
 
 class Estabelecimento extends Model {
   public estabelecimentoId!: number;
-  public usuarioId!: number | null;
   public categoria!: string;
   public contatoEstabelecimento!: string;
   public cnpj!: string;
@@ -44,15 +42,6 @@ Estabelecimento.init(
       autoIncrement: true,
       primaryKey: true,
       field: "estabelecimento_id",
-    },
-    usuarioId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      field: "usuario_id",
-      references: {
-        model: "usuarios",
-        key: "usuario_id",
-      },
     },
     categoria: {
       type: DataTypes.STRING,
@@ -156,17 +145,17 @@ Estabelecimento.init(
       field: "venda",
     },
     escala: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-      field: "escala",
+      type: DataTypes.INTEGER, 
+      allowNull: false,        
+      defaultValue: 0,         
+      field: 'escala',         
     },
   },
   {
     sequelize,
     tableName: "estabelecimentos",
     timestamps: true,
-  },
+  }
 );
 
 export default Estabelecimento;
