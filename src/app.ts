@@ -16,6 +16,7 @@ import avaliacaoRoutes from "./routes/avaliacao.routes";
 import estabelecimentoRoutes from "./routes/estabelecimento.routes";
 import fileRoutes from "./routes/file.routes";
 import adminRoutes from "./routes/admin.routes";
+import cursoRoutes from "./routes/curso.routes";
 import { authMiddleware } from "./middlewares/auth.middleware";
 
 const app = express();
@@ -46,6 +47,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/estabelecimentos", estabelecimentoRoutes);
 app.use("/api/avaliacoes", avaliacaoRoutes);
 app.use("/api/files", fileRoutes);
+app.use("/api/cursos", cursoRoutes);
 
 app.use("/api/admin", adminRoutes);
 

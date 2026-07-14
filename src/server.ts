@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env.local") });
 console.log("Servindo uploads em:", path.resolve(__dirname, "..", "uploads"));
 import app from "./app";
 import sequelize from "./config/database";
+import "./entities/Curso.entity";
 
 const PORT = process.env.PORT || 3306;
 

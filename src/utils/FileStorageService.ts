@@ -8,6 +8,14 @@ import { sanitizeFilename } from "./stringUtils";
 const UPLOADS_DIR = path.resolve(__dirname, "..", "..", "uploads");
 
 class FileStorageService {
+  private buildPublicUrl(filename: string): string {
+    const appUrl = (process.env.APP_URL || "").trim().replace(/\/$/, "");
+    if (appUrl) {
+      return `${appUrl}/uploads/${filename}`;
+    }
+    return `/uploads/${filename}`;
+  }
+
   private async ensureUploadsDirExists(): Promise<void> {
     try {
       await fs.access(UPLOADS_DIR);
@@ -38,9 +46,7 @@ class FileStorageService {
 
     await fs.writeFile(filePath, imageBuffer);
 
-    // --- CORREÇÃO AQUI ---
-    // Retorna a URL completa usando a variável de ambiente e o caminho /uploads/
-    return `${process.env.APP_URL}/uploads/${uniqueFilename}`;
+    return this.buildPublicUrl(uniqueFilename);
   }
 
   public async save(file: Express.Multer.File): Promise<string> {
@@ -49,9 +55,7 @@ class FileStorageService {
     // O Multer já deve ter salvo o arquivo na pasta 'uploads' com um 'filename' único
     // (Verifique sua configuração do Multer se 'file.filename' não for o nome final)
 
-    // --- CORREÇÃO AQUI ---
-    // Retorna a URL completa usando a variável de ambiente e o caminho /uploads/
-    const fileUrl = `${process.env.APP_URL}/uploads/${file.filename}`;
+    const fileUrl = this.buildPublicUrl(file.filename);
     return fileUrl;
   }
 

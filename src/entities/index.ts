@@ -5,6 +5,7 @@ import Estabelecimento from "./Estabelecimento.entity";
 import Avaliacao from "./Avaliacao.entity";
 import ImagemProduto from "./ImagemProduto.entity";
 import ContadorVisualizacao from "./ContadorVisualizacao.entity";
+import Curso from "./Curso.entity";
 
 // Usuário <-> Estabelecimento
 Usuario.hasMany(Estabelecimento, {
@@ -56,4 +57,5 @@ export {
   Avaliacao,
   ImagemProduto,
   ContadorVisualizacao,
+  Curso,
 };
