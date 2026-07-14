@@ -4,10 +4,8 @@ import sequelize from "../config/database";
 class Curso extends Model {
   public cursoId!: number;
   public nome!: string;
-  public descricao!: string | null;
   public link!: string | null;
   public imagemUrl!: string | null;
-  public ativo!: boolean;
 }
 
 Curso.init(
@@ -16,15 +14,12 @@ Curso.init(
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
-      field: "curso_id",
+      field: "id",
     },
     nome: {
       type: DataTypes.STRING,
       allowNull: false,
-    },
-    descricao: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      field: "titulo",
     },
     link: {
       type: DataTypes.STRING,
@@ -33,12 +28,7 @@ Curso.init(
     imagemUrl: {
       type: DataTypes.STRING,
       allowNull: true,
-      field: "imagem_url",
-    },
-    ativo: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
+      field: "imagemUrl",
     },
   },
   {

@@ -43,10 +43,10 @@ class CursoController {
       id: curso.cursoId,
       cursoId: curso.cursoId,
       nome: curso.nome,
-      descricao: curso.descricao,
+      descricao: null,
       link: curso.link,
       imagemUrl: curso.imagemUrl,
-      ativo: curso.ativo,
+      ativo: true,
       createdAt: curso.createdAt,
       updatedAt: curso.updatedAt,
     };

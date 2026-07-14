@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import dotenv from "dotenv";
-import sequelize from "./config/database";
 
 // É uma boa prática carregar as variáveis de ambiente o mais cedo possível
 // Se você tem um .env.local, esta linha o carregará. Caso contrário, o dotenv.config() abaixo pegará o .env padrão.
@@ -27,21 +26,6 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 app.use("/uploads", express.static(uploadsPath));
-
-// conecta ao banco com Sequelize
-sequelize
-  .authenticate()
-  .then(() => {
-    console.log("Conexão com o banco estabelecida com sucesso!");
-
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`Servidor rodando na porta ${PORT}`);
-    });
-  })
-  .catch((error: any) => {
-    console.error("Erro ao conectar no banco:", error);
-  });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/estabelecimentos", estabelecimentoRoutes);
