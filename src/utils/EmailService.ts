@@ -10,15 +10,34 @@ class EmailService {
   private transporter;
 
   constructor() {
+    const port = Number(process.env.MAIL_PORT);
     this.transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: false,
+      port,
+      // Porta 465 usa TLS implícito (SMTPS). 587/25 iniciam em texto puro e
+      // fazem STARTTLS. Usar secure:false na 465 causa "Greeting never received".
+      secure: port === 465,
       auth: {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASS,
       },
     });
+  }
+
+  /**
+   * Verifica a conexão/credenciais SMTP. Não lança: apenas loga, para o servidor
+   * subir mesmo com o e-mail indisponível e falhar de forma visível cedo.
+   */
+  public async verifyConnection(): Promise<void> {
+    try {
+      await this.transporter.verify();
+      console.log("Conexão SMTP verificada com sucesso.");
+    } catch (err: any) {
+      console.error(
+        "SMTP indisponível - envio de e-mails vai falhar:",
+        err?.message ?? err
+      );
+    }
   }
 
   public async sendConfirmationEmail(to: string, token: string): Promise<void> {

@@ -16,10 +16,26 @@ class AuthController {
           "Cadastro realizado com sucesso! Por favor, verifique seu e-mail para ativar sua conta.",
       });
     } catch (error: any) {
-      if (error.message.includes("já cadastrado")) {
-        return res.status(409).json({ message: error.message });
+      const message: string = error?.message ?? "";
+
+      if (message.includes("já cadastrado")) {
+        return res.status(409).json({ message });
       }
-      return res.status(400).json({ message: error.message });
+
+      // Erros de validação de negócio conhecidos: devolver a mensagem ao cliente.
+      const erroValidacaoConhecido =
+        message.includes("inapropriad") || message.includes("emoji");
+      if (erroValidacaoConhecido) {
+        return res.status(400).json({ message });
+      }
+
+      // Qualquer outra coisa (ex.: SMTP "Greeting never received", falha de DB):
+      // logar internamente e devolver mensagem genérica, sem vazar detalhes.
+      console.error("Erro inesperado no cadastro:", error);
+      return res.status(500).json({
+        message:
+          "Não foi possível concluir o cadastro. Entre em contato conosco por e-mail.",
+      });
     }
   }
 
@@ -88,7 +104,7 @@ class AuthController {
 
   public async confirmEmailChange(
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<Response> {
     try {
       await AuthService.confirmEmailChange(req.query.token as string);

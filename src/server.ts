@@ -7,6 +7,7 @@ dotenv.config();
 import app from "./app";
 import sequelize from "./config/database";
 import "./entities";
+import EmailService from "./utils/EmailService";
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -20,6 +21,7 @@ sequelize
     app.listen(PORT, () => {
       console.log(`Servidor rodando na porta ${PORT}`);
     });
+    void EmailService.verifyConnection();
   })
   .catch((err) => {
     console.error("Erro ao iniciar servidor:", err);
